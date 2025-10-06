@@ -1,0 +1,247 @@
+/* Basic reset and full-screen setup */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* Prevents scrollbars */
+  background-color: #121212; /* Dark background */
+  color: #eaeaea; /* Light text color */
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.5s ease;
+}
+
+/* The background images will be applied to the body with this class */
+body.shabbat-background {
+  /* Add a semi-transparent black overlay to dim the image */
+  background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)),
+    url("challah.png");
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover; /* Make the image cover the entire background */
+}
+
+/* Main container to center the clock */
+.clock-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  height: 100vh; /* Full viewport height */
+  text-align: center;
+  cursor: none; /* Hide cursor over the clock */
+}
+
+/* Styling for the time display */
+.time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5vw;
+  font-size: 18vw; /* Responsive font size */
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+  /* This property ensures all numbers have the same width, preventing horizontal shifting */
+  font-variant-numeric: tabular-nums;
+}
+
+.ampm-stack {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.ampm-stack span {
+  font-size: 4vw; /* Much smaller than the main time */
+  font-weight: 500;
+  line-height: 1;
+}
+
+.ampm-stack .active {
+  color: #eaeaea; /* The main light color */
+}
+
+.ampm-stack .inactive {
+  color: #505050; /* A darker grey for the inactive element */
+}
+
+/* Styling for the standard date display */
+.date {
+  font-size: 4vw; /* Responsive font size */
+  font-weight: 400;
+  opacity: 0.8; /* Slightly muted appearance */
+  transition: color 0.5s ease;
+}
+
+/* Special styling for the Shabbat greeting */
+.shabbat {
+  font-size: 5vw; /* Slightly larger and more prominent */
+  font-weight: 500;
+  color: #ffd700; /* A warm, gold color */
+  opacity: 0.95;
+  transition: color 0.5s ease;
+}
+
+/* Special styling for the Bar Mitzvah greeting */
+.bar-mitzvah {
+  font-size: 4.5vw;
+  font-weight: 500;
+  color: #58a6ff; /* A celebratory blue color */
+  opacity: 0.95;
+  transition: color 0.5s ease;
+}
+
+/* Styling for the Shabbat time info in the top right */
+#shabbat-time-info {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  font-size: 2.5vw;
+  font-weight: 500;
+  color: #eaeaea;
+  opacity: 0.8;
+  display: none; /* Hidden by default, shown by script */
+}
+
+/* Invisible trigger for offset controls */
+#offset-trigger {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100px;
+  height: 100px;
+  z-index: 9;
+}
+
+/* Styling for the offset buttons in the top left */
+#offset-controls {
+  position: absolute;
+  top: 20px;
+  left: 30px;
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+#offset-controls.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#offset-controls button {
+  background-color: rgba(60, 60, 60, 0.8);
+  color: #eaeaea;
+  border: 1px solid #555;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: "Inter", sans-serif;
+  font-size: 1.8vw;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+#offset-controls button:hover {
+  background-color: rgba(80, 80, 80, 0.9);
+}
+#offset-controls button:active {
+  background-color: rgba(100, 100, 100, 0.9);
+}
+
+/* Red close button */
+#offset-controls button[data-action="close"] {
+  background-color: #c82333;
+  padding-left: 18px;
+  padding-right: 18px;
+  font-size: 2.2vw;
+  line-height: 1;
+}
+#offset-controls button[data-action="close"]:hover {
+  background-color: #e11d48;
+}
+
+/* Red "now" button when offset is active */
+#offset-controls button[data-offset-ms="reset"].offset-active {
+  background-color: #c82333;
+  border-color: #ff7f7f;
+}
+
+/* Styling for the weather info in the bottom left */
+#weather-info {
+  position: absolute;
+  bottom: 20px;
+  left: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #eaeaea;
+  opacity: 0.8;
+}
+#weather-info svg {
+  width: 5vw;
+  height: 5vw;
+}
+.weather-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+.current-temp {
+  font-size: 3vw;
+  font-weight: 500;
+}
+.high-low-temp {
+  display: flex;
+  gap: 12px;
+  font-size: 1.8vw;
+  font-weight: 400;
+}
+
+/* Media queries for larger screens */
+@media (min-width: 1200px) {
+  .time {
+    font-size: 220px; /* Cap the font size */
+    gap: 20px;
+  }
+  .ampm-stack span {
+    font-size: 50px;
+  }
+  .date {
+    font-size: 48px;
+  }
+  .shabbat {
+    font-size: 60px;
+  }
+  .bar-mitzvah {
+    font-size: 55px;
+  }
+  #shabbat-time-info {
+    font-size: 30px;
+  }
+  #offset-controls button {
+    font-size: 22px;
+  }
+  #offset-controls button[data-action="close"] {
+    font-size: 28px;
+  }
+  #weather-info {
+    gap: 15px;
+  }
+  #weather-info svg {
+    width: 60px;
+    height: 60px;
+  }
+  .current-temp {
+    font-size: 36px;
+  }
+  .high-low-temp {
+    font-size: 22px;
+    gap: 15px;
+  }
+}
