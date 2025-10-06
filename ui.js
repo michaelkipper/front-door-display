@@ -1,4 +1,4 @@
-import { formatTime } from "./utils.js";
+import { formatTime, padZero } from "./utils.js";
 
 // Select the DOM elements
 const timeStringElement = document.getElementById("time-string");
@@ -52,8 +52,8 @@ function setAmPmIndicator(now) {
 export function updateClockUI(now, isShabbat, shabbatStartTime, shabbatEndTime) {
   // --- Time Formatting ---
   let hours = now.getHours();
-  const minutes = (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
-  const seconds = (now.getSeconds() < 10 ? "0" : "") + now.getSeconds();
+  const minutes = padZero(now.getMinutes());
+  const seconds = padZero(now.getSeconds());
   const isAm = hours < 12;
   hours = hours % 12;
   hours = hours ? hours : 12;

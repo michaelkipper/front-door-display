@@ -87,15 +87,6 @@ body.shabbat-background {
   transition: color 0.5s ease;
 }
 
-/* Special styling for the Bar Mitzvah greeting */
-.bar-mitzvah {
-  font-size: 4.5vw;
-  font-weight: 500;
-  color: #58a6ff; /* A celebratory blue color */
-  opacity: 0.95;
-  transition: color 0.5s ease;
-}
-
 /* Styling for the Shabbat time info in the top right */
 #shabbat-time-info {
   position: absolute;
@@ -217,9 +208,6 @@ body.shabbat-background {
   }
   .shabbat {
     font-size: 60px;
-  }
-  .bar-mitzvah {
-    font-size: 55px;
   }
   #shabbat-time-info {
     font-size: 30px;
