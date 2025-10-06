@@ -51,6 +51,7 @@ async function fetchCalendarEvents(now) {
       ...event,
       isHoliday: event.category === "holiday",
       isShabbat: event.category === "shabbat",
+      isYomTov: event.yomtov === true,
       isCandleLighting: event.category === "candles",
       parsedDate: parseDate(event.date),
     }

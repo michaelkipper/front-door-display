@@ -97,7 +97,8 @@ export async function updateClockUI(now) {
     const event = holidayEvents[0];
     holidayInfoElement.textContent = event.title;
 
-    if (event.isShabbat) {
+    console.log("Is it shabbat?", event);
+    if (event.isShabbat || event.isYomTov) {
       document.body.classList.add("shabbat-background");
     } else {
       document.body.classList.remove("shabbat-background");
