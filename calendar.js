@@ -19,8 +19,23 @@ function parseDate(dateString) {
   return new Date(dateString);
 }
 
+function formatDate(date) {
+  const options = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  };
+  return date.toLocaleDateString('en-CA', options);
+}
+
+export function isToday(now, date) {
+  return now.getDate() === date.getDate() &&
+         now.getMonth() === date.getMonth() &&
+         now.getFullYear() === date.getFullYear();
+}
+
 async function fetchCalendarEvents(now) {
-  if (Date.now() - fetchCalendarEventsCache.timestamp < 5 * 60 * 1000) {
+  if (Date.now() - fetchCalendarEventsCache.timestamp < 15 * 1000) {
     console.log("Using cached calendar events from", new Date(fetchCalendarEventsCache.timestamp));
     return fetchCalendarEventsCache.events;
   }
@@ -32,8 +47,8 @@ async function fetchCalendarEvents(now) {
   const hebcalUrl = new URL("https://www.hebcal.com/hebcal");
   hebcalUrl.searchParams.set("v", "1"); // API version
   hebcalUrl.searchParams.set("cfg", "json"); // JSON format
-  hebcalUrl.searchParams.set("start", start.toISOString().split('T')[0]);
-  hebcalUrl.searchParams.set("end", end.toISOString().split('T')[0]);
+  hebcalUrl.searchParams.set("start", formatDate(start));
+  hebcalUrl.searchParams.set("end", formatDate(end));
   hebcalUrl.searchParams.set("maj", "on"); // Major holidays
   hebcalUrl.searchParams.set("min", "on"); // Minor holidays
   hebcalUrl.searchParams.set("c", "on"); // Candle lighting
@@ -41,7 +56,7 @@ async function fetchCalendarEvents(now) {
   hebcalUrl.searchParams.set("longitude", LONGITUDE);
   hebcalUrl.searchParams.set("b", "18"); // Candle lighting minutes
   hebcalUrl.searchParams.set("m", "42"); // Havdalah minutes
-  hebcalUrl.searchParams.set("s", "off"); // Sedra
+  hebcalUrl.searchParams.set("s", "on"); // Sedra
 
   console.log("Calling the HebCal API:", hebcalUrl.toString());
   const response = await fetch(hebcalUrl).then((response) => response.json());
@@ -50,9 +65,10 @@ async function fetchCalendarEvents(now) {
     return {
       ...event,
       isHoliday: event.category === "holiday",
-      isShabbat: event.category === "shabbat",
+      isShabbat: event.category === "parashat",
       isYomTov: event.yomtov === true,
       isCandleLighting: event.category === "candles",
+      isHavdalah: event.category === "havdalah",
       parsedDate: parseDate(event.date),
     }
   });
@@ -90,4 +106,42 @@ export async function getCalendarEvents(now) {
   });
 
   return getCalendarEventsCache.events;
+}
+
+export async function isYomTov(now) {
+  const events = await getCalendarEvents(now);
+
+  const holiday = events.find(event => event.isHoliday);
+  if (holiday) {
+    return true;
+  }
+
+  const candleLighting = events.find(event => event.isCandleLighting);
+  if (candleLighting && now > candleLighting.parsedDate) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function getNextCandleLightingEvent(now) {
+  const events = await fetchCalendarEvents(now);
+
+  const candleLightingEvents = events.filter(event => event.isCandleLighting).sort((a, b) => a.parsedDate - b.parsedDate);
+  if (candleLightingEvents.length === 0) {
+    return null;
+  }
+
+  return candleLightingEvents[0];
+}
+
+export async function getNextHavdalahEvent(now) {
+  const events = await fetchCalendarEvents(now);
+
+  const havdalahEvents = events.filter(event => event.isHavdalah).sort((a, b) => a.parsedDate - b.parsedDate);
+  if (havdalahEvents.length === 0) {
+    return null;
+  }
+
+  return havdalahEvents[0];
 }

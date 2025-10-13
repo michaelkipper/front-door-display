@@ -1,5 +1,5 @@
 import { formatTime, padZero } from "./utils.js";
-import { getCalendarEvents } from "./calendar.js";
+import { getCalendarEvents, isYomTov, getNextCandleLightingEvent, getNextHavdalahEvent, isToday } from "./calendar.js";
 
 // Select the DOM elements
 const timeStringElement = document.getElementById("time-string");
@@ -11,6 +11,14 @@ const offsetControlsElement = document.getElementById("offset-controls");
 const offsetTriggerElement = document.getElementById("offset-trigger");
 const holidayInfoElement = document.getElementById("holiday-info");
 
+// Days of the week.
+const SUNDAY = 0;
+const MONDAY = 1;
+const TUESDAY = 2;
+const WEDNESDAY = 3;
+const THURSDAY = 4;
+const FRIDAY = 5;
+const SATURDAY = 6;
 
 /**
  * Initializes the offset controls and listeners.
@@ -52,6 +60,23 @@ function setAmPmIndicator(now) {
   }
 }
 
+function isShabbat(now, candleLightingEvents, havdalahEvents) {
+  // Check to see if it's Saturday.
+  if (now.getDay() == SATURDAY) {
+    if (havdalahEvents.length > 0 && now >= havdalahEvents[0].parsedDate) {
+      return false;
+    }
+    return true;
+  } else if (now.getDay() == FRIDAY) {
+    if (candleLightingEvents.length > 0 && now >= candleLightingEvents[0].parsedDate) {
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
 export async function updateClockUI(now) {
   // --- Time Formatting ---
   let hours = now.getHours();
@@ -62,53 +87,89 @@ export async function updateClockUI(now) {
   timeStringElement.textContent = `${hours}:${minutes}:${seconds}`;
   setAmPmIndicator(now);
 
-  let today = new Date(now);
-  let tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
   // --- Calendar Calculation Logic ---
-  const todayCalendarEvents = await getCalendarEvents(today);
-  const tomorrowCalendarEvents = await getCalendarEvents(tomorrow);
+  let events = await getCalendarEvents(now);
+  let candleLightingEvents = events.filter(event => event.isCandleLighting);
+  let havdalahEvents = events.filter(event => event.isHavdalah);
 
-  const candleLightingEvents = todayCalendarEvents.filter(event => event.isCandleLighting);
+  // If today was a day that we light candles, and it's past candle-lighting time,
+  // then update events to be tomorrow's events.
   if (candleLightingEvents.length > 0) {
     const event = candleLightingEvents[0];
-    if (now < candleLightingEvents[0].parsedDate) {
-      // We light candles today, but it's not yet time.
-      shabbatInfoElement.textContent = `Candle Lighting: ${formatTime(event.parsedDate)}`;
-      shabbatInfoElement.style.display = "block";
-    } else {
-      const tomorrowHavdalahEvents = tomorrowCalendarEvents.filter(event => event.category === "havdalah");
-      if (tomorrowHavdalahEvents.length > 0) {
-        shabbatInfoElement.textContent = `Havdalah: ${formatTime(new Date(tomorrowHavdalahEvents[0].date))}`;
-        shabbatInfoElement.style.display = "block";
-      }
+    if (now >= event.parsedDate) {
+      let tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      events = await getCalendarEvents(tomorrow);
+      candleLightingEvents = events.filter(event => event.isCandleLighting);
+      havdalahEvents = events.filter(event => event.isHavdalah);
     }
-  } else {
-    // There is no candle lighting today.
+  } else if (havdalahEvents.length > 0) {
+    const event = havdalahEvents[0];
+    if (now >= event.parsedDate) {
+      let tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      events = await getCalendarEvents(tomorrow);
+      candleLightingEvents = events.filter(event => event.isCandleLighting);
+      havdalahEvents = events.filter(event => event.isHavdalah);
+    }
   }
 
-  const havdalahEvents = todayCalendarEvents.filter(event => event.category === "havdalah");
-  const holidayEvents = todayCalendarEvents.filter(event => event.isHoliday);
-  const shabbatEvents = todayCalendarEvents.filter(event => event.isShabbat);
-
-  // --- UI Update Logic ---
-  if (holidayEvents.length > 0) {
-    const event = holidayEvents[0];
-    holidayInfoElement.textContent = event.title;
-
-    console.log("Is it shabbat?", event);
-    if (event.isShabbat || event.isYomTov) {
-      document.body.classList.add("shabbat-background");
-    } else {
-      document.body.classList.remove("shabbat-background");
-    }
-
-    dateDisplayElement.className = "shabbat";
+  if (candleLightingEvents.length > 0) {
+    const event = candleLightingEvents[0];
+    shabbatInfoElement.textContent = `Candle Lighting: ${formatTime(event.parsedDate)}`;
+    shabbatInfoElement.style.display = "block";
+    document.body.classList.remove("shabbat-background");
+  } else if (havdalahEvents.length > 0) {
+    const event = havdalahEvents[0];
+    shabbatInfoElement.textContent = `Havdalah: ${formatTime(event.parsedDate)}`;
+    shabbatInfoElement.style.display = "block";
+    document.body.classList.remove("shabbat-background");
   } else {
+    shabbatInfoElement.style.display = "none";
     document.body.classList.remove("shabbat-background");
   }
 
+  const holidayEvents = events.filter(event => event.isHoliday);
+  const yomTovEvents = events.filter(event => event.isYomTov);
+  const shabbatEvents = events.filter(event => event.isShabbat);
+
+  // --- UI Update Logic ---
+  if (yomTovEvents.length > 0) {
+    // It's chag.
+    document.body.classList.add("shabbat-background");
+    
+    const event = yomTovEvents[0];
+    console.log("It's currently a YomTov:", event);
+    holidayInfoElement.textContent = event.title;
+    holidayInfoElement.style.display = "block";
+    dateDisplayElement.className = "shabbat";
+  } else if (shabbatEvents.length > 0) {
+    // It's Shabbat.
+    document.body.classList.add("shabbat-background");
+
+    const event = shabbatEvents[0];
+    console.log("It's currently Shabbat:", event);
+    holidayInfoElement.textContent = event.title;
+    holidayInfoElement.style.display = "block";
+    dateDisplayElement.className = "shabbat";
+  } else if (holidayEvents.length > 0) {
+    // It's a non-chag holiday.
+    document.body.classList.remove("shabbat-background");
+
+    const event = holidayEvents[0];
+    console.log("It's currently a holiday:", event);
+    holidayInfoElement.textContent = event.title;
+    holidayInfoElement.stype = "block";
+    dateDisplayElement.className = "shabbat";
+  } else {
+    // It's a regular weekday.
+    holidayInfoElement.style.display = "none";
+    document.body.classList.remove("shabbat-background");
+  }
+
+  // --- Write the current date ---
   const dateOptions = {
     weekday: "long",
     year: "numeric",
@@ -120,13 +181,4 @@ export async function updateClockUI(now) {
     dateOptions
   ).format(now);
   dateDisplayElement.className = "date";
-
-  if (candleLightingEvents.length > 0) {
-  } else if (havdalahEvents.length > 0) {
-    const event = havdalahEvents[0];
-    shabbatInfoElement.textContent = `Havdalah: ${formatTime(new Date(event.date))}`;
-    shabbatInfoElement.style.display = "block";
-  } else {
-    shabbatInfoElement.style.display = "none";
-  }
 }
