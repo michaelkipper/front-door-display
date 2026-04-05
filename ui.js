@@ -92,6 +92,11 @@ export async function updateClockUI(now) {
   let candleLightingEvents = events.filter(event => event.isCandleLighting);
   let havdalahEvents = events.filter(event => event.isHavdalah);
 
+  // Determine if it's currently Shabbat based on day-of-week and candle lighting/havdalah times,
+  // BEFORE swapping to tomorrow's events. This handles cases where tomorrow has no parashat event
+  // (e.g., Shabbat Chol HaMoed) but it IS still Shabbat.
+  const currentlyShabbat = isShabbat(now, candleLightingEvents, havdalahEvents);
+
   // If today was a day that we light candles, and it's past candle-lighting time,
   // then update events to be tomorrow's events.
   if (candleLightingEvents.length > 0) {
@@ -145,14 +150,16 @@ export async function updateClockUI(now) {
     holidayInfoElement.textContent = event.title;
     holidayInfoElement.style.display = "block";
     dateDisplayElement.className = "shabbat";
-  } else if (shabbatEvents.length > 0) {
+  } else if (currentlyShabbat || shabbatEvents.length > 0) {
     // It's Shabbat.
     document.body.classList.add("shabbat-background");
 
-    const event = shabbatEvents[0];
-    console.log("It's currently Shabbat:", event);
-    holidayInfoElement.textContent = event.title;
-    holidayInfoElement.style.display = "block";
+    const event = shabbatEvents[0] || holidayEvents[0];
+    if (event) {
+      console.log("It's currently Shabbat:", event);
+      holidayInfoElement.textContent = event.title;
+      holidayInfoElement.style.display = "block";
+    }
     dateDisplayElement.className = "shabbat";
   } else if (holidayEvents.length > 0) {
     // It's a non-chag holiday.
