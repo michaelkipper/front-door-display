@@ -85,11 +85,6 @@ async function fetchCalendarEvents(now) {
  * @returns {Promise<any>}
  */
 export async function getCalendarEvents(now) {
-  // if (Date.now() - getCalendarEventsCache.timestamp < 0 * 1000) {
-  //   console.log("Using cached calendar events from", new Date(getCalendarEventsCache.timestamp));
-  //   return getCalendarEventsCache.events;
-  // }
-
   console.log("Getting calendar events...");
   const allEvents = await fetchCalendarEvents(now);
 
