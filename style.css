@@ -15,6 +15,8 @@ body {
 }
 
 /* The background images will be applied to the body with this class */
+/* When a DALL-E generated image is available, it's set via inline style. */
+/* challah.png serves as the fallback when no API key is configured. */
 body.shabbat-background {
   /* Add a semi-transparent black overlay to dim the image */
   background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)),

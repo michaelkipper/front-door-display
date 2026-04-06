@@ -1,5 +1,9 @@
 import { formatTime, padZero } from "./utils.js";
 import { getCalendarEvents, isYomTov, getNextCandleLightingEvent, getNextHavdalahEvent, isToday } from "./calendar.js";
+import { generateImage } from "./image.js";
+
+let currentBackgroundImage = null;
+let lastImagePromptEvents = null;
 
 // Select the DOM elements
 const timeStringElement = document.getElementById("time-string");
@@ -141,6 +145,8 @@ export async function updateClockUI(now) {
   const shabbatEvents = events.filter(event => event.isShabbat);
 
   // --- UI Update Logic ---
+  const isShabbatOrYomTov = yomTovEvents.length > 0 || currentlyShabbat || shabbatEvents.length > 0;
+
   if (yomTovEvents.length > 0) {
     // It's chag.
     document.body.classList.add("shabbat-background");
@@ -168,12 +174,32 @@ export async function updateClockUI(now) {
     const event = holidayEvents[0];
     console.log("It's currently a holiday:", event);
     holidayInfoElement.textContent = event.title;
-    holidayInfoElement.stype = "block";
+    holidayInfoElement.style.display = "block";
     dateDisplayElement.className = "shabbat";
   } else {
     // It's a regular weekday.
     holidayInfoElement.style.display = "none";
     document.body.classList.remove("shabbat-background");
+  }
+
+  // --- Dynamic Background Image ---
+  if (isShabbatOrYomTov) {
+    // Generate a themed image if we haven't already for this set of events
+    const eventsKey = events.map(e => e.title).join(",");
+    if (eventsKey !== lastImagePromptEvents) {
+      lastImagePromptEvents = eventsKey;
+      const imageUrl = await generateImage(events);
+      if (imageUrl) {
+        currentBackgroundImage = imageUrl;
+      }
+    }
+    if (currentBackgroundImage) {
+      document.body.style.backgroundImage = `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url("${currentBackgroundImage}")`;
+    }
+  } else {
+    document.body.style.backgroundImage = "";
+    currentBackgroundImage = null;
+    lastImagePromptEvents = null;
   }
 
   // --- Write the current date ---
