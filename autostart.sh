@@ -8,7 +8,7 @@
 #
 
 cd /home/mkipper/src/michaelkipper/front-door-display
-python3 -m http.server 8080 > ~/http.log 2>&1 &
+python3 server.py > ~/http.log 2>&1 &
 
 sleep 2
 

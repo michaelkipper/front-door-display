@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digital Clock</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <!-- Invisible trigger for offset controls -->
+    <div id="offset-trigger"></div>
+
+    <!-- Buttons for live offset changes -->
+    <div id="offset-controls">
+      <button data-offset-ms="-86400000">-1d</button>
+      <button data-offset-ms="-21600000">-6h</button>
+      <button data-offset-ms="-10800000">-3h</button>
+      <button data-offset-ms="reset">now</button>
+      <button data-offset-ms="10800000">+3h</button>
+      <button data-offset-ms="21600000">+6h</button>
+      <button data-offset-ms="86400000">+1d</button>
+      <button data-action="close">&times;</button>
+    </div>
+
+    <div class="clock-container">
+      <div id="time" class="time">
+        <span id="time-string">12:34:56</span>
+        <div class="ampm-stack">
+          <span id="am-indicator" class="inactive">AM</span>
+          <span id="pm-indicator" class="active">PM</span>
+        </div>
+      </div>
+      <!-- This element's class will be changed by the script -->
+      <div id="date-display" class="date">Monday, 1 January</div>
+      <div id="holiday-info" class="date" style="display:none">Holiday Info</div>
+    </div>
+
+    <!-- This element will show Shabbat start/end times -->
+    <div id="shabbat-time-info"></div>
+
+    <!-- This element shows the current weather -->
+    <div id="weather-info"></div>
+
+    <script>
+      // --- DOM elements ---
+      const timeStringEl = document.getElementById("time-string");
+      const dateDisplayEl = document.getElementById("date-display");
+      const amIndicator = document.getElementById("am-indicator");
+      const pmIndicator = document.getElementById("pm-indicator");
+      const shabbatInfoEl = document.getElementById("shabbat-time-info");
+      const holidayInfoEl = document.getElementById("holiday-info");
+      const weatherInfoEl = document.getElementById("weather-info");
+      const offsetControlsEl = document.getElementById("offset-controls");
+      const offsetTriggerEl = document.getElementById("offset-trigger");
+
+      // --- State ---
+      let timeOffsetMs = 0;
+      let lastBackgroundImage = null;
+
+      // --- Weather SVG icons (WMO code mapping) ---
+      function getWeatherIcon(code) {
+        if (code === 0)
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+        if (code >= 1 && code <= 3)
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>';
+        if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"></path><line x1="8" y1="19" x2="8" y2="21"></line><line x1="12" y1="19" x2="12" y2="21"></line><line x1="16" y1="19" x2="16" y2="21"></line></svg>';
+        if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86))
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"></path><line x1="8" y1="19" x2="8" y2="21"></line><line x1="12" y1="19" x2="12" y2="21"></line><line x1="16" y1="19" x2="16" y2="21"></line><line x1="10" y1="15" x2="14" y2="15"></line><line x1="9" y1="12" x2="11" y2="12"></line><line x1="13" y1="12" x2="15" y2="12"></line></svg>';
+        if (code >= 95 && code <= 99)
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16.5c0-1.68-1.34-3-3-3h-1.26a8 8 0 1 0-11.48 0H4c-1.66 0-3 1.32-3 3s1.34 3 3 3h14c1.66 0 3-1.32 3-3z"></path><polyline points="13 11 9 17 15 17 11 23"></polyline></svg>';
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>';
+      }
+
+      // --- Clock tick (runs every second) ---
+      function updateClock() {
+        const now = new Date(Date.now() + timeOffsetMs);
+        let hours = now.getHours();
+        const minutes = String(now.getMinutes()).padStart(2, "0");
+        const seconds = String(now.getSeconds()).padStart(2, "0");
+        const isAm = hours < 12;
+        hours = hours % 12 || 12;
+        timeStringEl.textContent = hours + ":" + minutes + ":" + seconds;
+
+        if (isAm) {
+          amIndicator.className = "active";
+          pmIndicator.className = "inactive";
+        } else {
+          amIndicator.className = "inactive";
+          pmIndicator.className = "active";
+        }
+
+        // Date
+        const dateOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+        dateDisplayEl.textContent = new Intl.DateTimeFormat("en-US", dateOptions).format(now);
+      }
+
+      // --- Fetch state from server and apply ---
+      async function fetchState() {
+        try {
+          const resp = await fetch("/api/state");
+          if (!resp.ok) return;
+          const state = await resp.json();
+          applyState(state);
+        } catch (e) {
+          console.error("Failed to fetch state:", e);
+        }
+      }
+
+      function applyState(state) {
+        // Weather
+        if (state.weather) {
+          const w = state.weather;
+          weatherInfoEl.innerHTML =
+            getWeatherIcon(w.code) +
+            '<div class="weather-details">' +
+            '  <span class="current-temp">' + w.temp + "°C</span>" +
+            '  <div class="high-low-temp">' +
+            "    <span>H: " + w.high + "°</span>" +
+            "    <span>L: " + w.low + "°</span>" +
+            "  </div>" +
+            "</div>";
+        } else {
+          weatherInfoEl.innerHTML = "<span>--°C</span>";
+        }
+
+        // Holiday info
+        if (state.holiday_name) {
+          holidayInfoEl.textContent = state.holiday_name;
+          holidayInfoEl.style.display = "block";
+        } else {
+          holidayInfoEl.style.display = "none";
+        }
+
+        // Date display class
+        dateDisplayEl.className = state.display_class || "date";
+
+        // Shabbat background
+        if (state.show_shabbat_background) {
+          document.body.classList.add("shabbat-background");
+        } else {
+          document.body.classList.remove("shabbat-background");
+        }
+
+        // Candle lighting / Havdalah
+        if (state.candle_lighting) {
+          shabbatInfoEl.textContent = "Candle Lighting: " + state.candle_lighting;
+          shabbatInfoEl.style.display = "block";
+        } else if (state.havdalah) {
+          shabbatInfoEl.textContent = "Havdalah: " + state.havdalah;
+          shabbatInfoEl.style.display = "block";
+        } else {
+          shabbatInfoEl.style.display = "none";
+        }
+
+        // Background image
+        if (state.background_image && state.background_image !== lastBackgroundImage) {
+          lastBackgroundImage = state.background_image;
+          document.body.style.backgroundImage =
+            'linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url("' +
+            state.background_image + '")';
+          document.body.style.backgroundPosition = "center center";
+          document.body.style.backgroundRepeat = "no-repeat";
+          document.body.style.backgroundSize = "cover";
+        } else if (!state.background_image) {
+          document.body.style.backgroundImage = "";
+          lastBackgroundImage = null;
+        }
+      }
+
+      // --- Offset controls ---
+      offsetTriggerEl.addEventListener("click", function () {
+        offsetControlsEl.classList.add("visible");
+      });
+
+      offsetControlsEl.addEventListener("click", async function (event) {
+        const button = event.target.closest("button");
+        if (!button) return;
+
+        if (button.dataset.action === "close") {
+          offsetControlsEl.classList.remove("visible");
+          return;
+        }
+
+        const offsetMs = button.dataset.offsetMs;
+        let body;
+        if (offsetMs === "reset") {
+          body = { action: "reset" };
+        } else {
+          body = { offset_ms: parseInt(offsetMs, 10) };
+        }
+
+        try {
+          const resp = await fetch("/api/offset", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const result = await resp.json();
+          timeOffsetMs = result.offset_ms;
+
+          // Update the "now" button appearance
+          const nowBtn = offsetControlsEl.querySelector('[data-offset-ms="reset"]');
+          if (nowBtn) {
+            if (timeOffsetMs !== 0) {
+              nowBtn.classList.add("offset-active");
+            } else {
+              nowBtn.classList.remove("offset-active");
+            }
+          }
+
+          updateClock();
+          fetchState();
+        } catch (e) {
+          console.error("Failed to update offset:", e);
+        }
+      });
+
+      // --- Initialize ---
+      updateClock();
+      fetchState();
+      setInterval(updateClock, 1000);
+      setInterval(fetchState, 30000);
+    </script>
+  </body>
+</html>

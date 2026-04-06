@@ -7,6 +7,9 @@ body {
   width: 100%;
   overflow: hidden; /* Prevents scrollbars */
   background-color: #121212; /* Dark background */
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
   color: #eaeaea; /* Light text color */
   font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -20,7 +23,7 @@ body {
 body.shabbat-background {
   /* Add a semi-transparent black overlay to dim the image */
   background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)),
-    url("challah.png");
+    url("/static/challah.png");
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover; /* Make the image cover the entire background */
