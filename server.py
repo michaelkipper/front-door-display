@@ -113,20 +113,18 @@ def _format_time_12h(dt):
     return f"{hour}:{minute} {ampm}"
 
 
-def _format_omer_count(day):
-    """Format an Omer day number into a display string with weeks and days."""
-    if not day or day < 1 or day > 49:
+def _format_omer_count(omer_data):
+    """Extract Omer count strings from Hebcal API data.
+
+    Returns a dict with 'en' and 'he' count strings, or None.
+    """
+    if not omer_data or not isinstance(omer_data, dict):
         return None
-    weeks, days = divmod(day, 7)
-    parts = [f"Day {day} of the Omer"]
-    if weeks and not days:
-        parts.append(f"{weeks} {'week' if weeks == 1 else 'weeks'}")
-    elif weeks:
-        parts.append(
-            f"{weeks} {'week' if weeks == 1 else 'weeks'}, "
-            f"{days} {'day' if days == 1 else 'days'}"
-        )
-    return " · ".join(parts)
+    count = omer_data.get("count", {})
+    en = count.get("en")
+    if not en:
+        return None
+    return {"en": en, "he": count.get("he", en)}
 
 
 def _log_throttled(last_log_ts, message, interval_seconds=300):
@@ -223,7 +221,7 @@ def _fetch_calendar_events(now):
     url = (
         f"https://www.hebcal.com/hebcal"
         f"?v=1&cfg=json&start={start}&end={end}"
-        f"&maj=on&min=on&c=on&omer=on"
+        f"&maj=on&min=on&c=on&o=on"
         f"&latitude={LATITUDE}&longitude={LONGITUDE}"
         f"&b={CANDLE_LIGHTING_MINUTES}&m={HAVDALAH_MINUTES}&s=on"
     )
