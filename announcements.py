@@ -14,7 +14,7 @@ from gtts import gTTS
 import pychromecast
 
 REMINDER_MINUTES = 5
-SPEAKER_GROUP_NAME = "All Speakers"
+SPEAKER_NAME = "Kitchen display"
 ANNOUNCEMENT_FILE = os.path.join("static", "announcement.mp3")
 CHECK_INTERVAL_SECONDS = 30
 
@@ -107,18 +107,18 @@ def _play_on_device(cast, audio_url):
 
 
 def _cast_to_speakers(audio_url):
-    """Cast an audio URL to the All Speakers group."""
-    logging.info("Discovering Chromecast devices matching '%s'...", SPEAKER_GROUP_NAME)
+    """Cast an audio URL to the default speaker."""
+    logging.info("Discovering Chromecast devices matching '%s'...", SPEAKER_NAME)
     chromecasts, browser = pychromecast.get_listed_chromecasts(
-        friendly_names=[SPEAKER_GROUP_NAME]
+        friendly_names=[SPEAKER_NAME]
     )
     try:
         if not chromecasts:
-            logging.error("Speaker group '%s' not found on network", SPEAKER_GROUP_NAME)
+            logging.error("Device '%s' not found on network", SPEAKER_NAME)
             return False
 
         _play_on_device(chromecasts[0], audio_url)
-        logging.info("Announcement cast to '%s'", SPEAKER_GROUP_NAME)
+        logging.info("Announcement cast to '%s'", SPEAKER_NAME)
         return True
     finally:
         browser.stop_discovery()
