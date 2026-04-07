@@ -91,42 +91,69 @@
     ctx.fill("evenodd");
   }
 
+  function upperBulbPath(g) {
+    var cx = g.cx, left = g.left, right = g.right;
+    var gt = g.glassTop, mid = g.mid, nr = g.neckR;
+    ctx.beginPath();
+    ctx.moveTo(left, gt);
+    ctx.bezierCurveTo(left, mid - nr * 2, cx - nr, mid, cx - nr, mid);
+    ctx.lineTo(cx + nr, mid);
+    ctx.bezierCurveTo(cx + nr, mid, right, mid - nr * 2, right, gt);
+    ctx.closePath();
+  }
+
+  function lowerBulbPath(g) {
+    var cx = g.cx, left = g.left, right = g.right;
+    var gb = g.glassBot, mid = g.mid, nr = g.neckR;
+    ctx.beginPath();
+    ctx.moveTo(right, gb);
+    ctx.bezierCurveTo(right, mid + nr * 2, cx + nr, mid, cx + nr, mid);
+    ctx.lineTo(cx - nr, mid);
+    ctx.bezierCurveTo(cx - nr, mid, left, mid + nr * 2, left, gb);
+    ctx.closePath();
+  }
+
   function drawSand(g, fraction) {
     var cx = g.cx, left = g.left, right = g.right;
     var gt = g.glassTop, gb = g.glassBot, mid = g.mid, nr = g.neckR;
-    var topH = (mid - gt) * 0.7;
-    var botH = (gb - mid) * 0.7;
 
-    // Top sand (decreasing)
-    var topLevel = topH * (1 - fraction);
-    if (topLevel > 1) {
+    // Top sand (decreasing) — clipped to upper bulb curve
+    var surfY = gt + (mid - gt) * fraction;
+    if (surfY < mid - 2) {
+      ctx.save();
+      upperBulbPath(g);
+      ctx.clip();
       ctx.fillStyle = SAND_COLOR_TOP;
+      // Funnel dip — sand surface dips toward center
+      var dipDepth = Math.min((mid - surfY) * 0.2, 10);
       ctx.beginPath();
-      var surfY = gt + (topH - topLevel) + 2;
-      var spread = (1 - fraction) * 0.85;
-      var sl = cx - (right - left) / 2 * spread;
-      var sr = cx + (right - left) / 2 * spread;
-      ctx.moveTo(sl, surfY);
-      ctx.lineTo(sr, surfY);
-      ctx.lineTo(cx + nr * 0.5, mid - 2);
-      ctx.lineTo(cx - nr * 0.5, mid - 2);
+      ctx.moveTo(left - 1, surfY);
+      ctx.quadraticCurveTo(cx, surfY + dipDepth, right + 1, surfY);
+      ctx.lineTo(right + 1, mid + 1);
+      ctx.lineTo(left - 1, mid + 1);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
     }
 
-    // Bottom sand (increasing) — pile shape
-    var botLevel = botH * fraction;
-    if (botLevel > 1) {
+    // Bottom sand (increasing) — clipped to lower bulb curve
+    var fillH = (gb - mid) * fraction;
+    if (fillH > 1) {
+      ctx.save();
+      lowerBulbPath(g);
+      ctx.clip();
       ctx.fillStyle = SAND_COLOR_BOTTOM;
+      var topOfSand = gb - fillH;
+      // Mound — sand piles higher in the center
+      var mound = Math.min(fillH * 0.25, 10);
       ctx.beginPath();
-      var baseY = gb - 2;
-      var pileSpread = Math.min(fraction * 1.2, 1.0);
-      var bl = cx - (right - left) / 2 * pileSpread;
-      var br = cx + (right - left) / 2 * pileSpread;
-      ctx.moveTo(bl, baseY);
-      ctx.quadraticCurveTo(cx, baseY - botLevel * 1.4, br, baseY);
+      ctx.moveTo(left - 1, gb + 1);
+      ctx.lineTo(right + 1, gb + 1);
+      ctx.lineTo(right + 1, topOfSand + mound);
+      ctx.quadraticCurveTo(cx, topOfSand - mound, left - 1, topOfSand + mound);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
     }
 
     // Falling stream through neck
