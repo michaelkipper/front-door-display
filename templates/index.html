@@ -30,7 +30,7 @@
 
     <div class="clock-container">
       <div id="time" class="time">
-        <span id="time-string">12:34:56</span>
+        <span id="time-string" class="flip-time"></span>
         <div class="ampm-stack">
           <span id="am-indicator" class="inactive">AM</span>
           <span id="pm-indicator" class="active">PM</span>
@@ -67,6 +67,7 @@
       // --- State ---
       let timeOffsetMs = 0;
       let lastBackgroundImage = null;
+      let prevTimeStr = "";
 
       // --- Weather SVG icons (WMO code mapping) ---
       function getWeatherIcon(code) {
@@ -91,7 +92,10 @@
         const seconds = String(now.getSeconds()).padStart(2, "0");
         const isAm = hours < 12;
         hours = hours % 12 || 12;
-        timeStringEl.textContent = hours + ":" + minutes + ":" + seconds;
+        const timeStr = hours + ":" + minutes + ":" + seconds;
+
+        updateFlipDigits(timeStr);
+        prevTimeStr = timeStr;
 
         if (isAm) {
           amIndicator.className = "active";
@@ -104,6 +108,59 @@
         // Date
         const dateOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
         dateDisplayEl.textContent = new Intl.DateTimeFormat("en-US", dateOptions).format(now);
+      }
+
+      function updateFlipDigits(timeStr) {
+        const container = timeStringEl;
+
+        // Rebuild cells when string length changes (e.g. 9:59 -> 10:00)
+        if (timeStr.length !== prevTimeStr.length) {
+          container.innerHTML = "";
+          for (let i = 0; i < timeStr.length; i++) {
+            const ch = timeStr[i];
+            if (ch === ":") {
+              const sep = document.createElement("span");
+              sep.className = "flip-separator";
+              sep.textContent = ":";
+              container.appendChild(sep);
+            } else {
+              const cell = document.createElement("span");
+              cell.className = "flip-cell";
+              cell.innerHTML =
+                '<span class="flip-card">' +
+                '  <span class="flip-front">' + ch + "</span>" +
+                '  <span class="flip-back"></span>' +
+                "</span>";
+              container.appendChild(cell);
+            }
+          }
+          return;
+        }
+
+        // Animate only changed digits
+        const cells = container.children;
+        for (let i = 0; i < timeStr.length; i++) {
+          if (timeStr[i] === prevTimeStr[i]) continue;
+          if (timeStr[i] === ":") continue;
+
+          const card = cells[i].querySelector(".flip-card");
+          if (!card || card.classList.contains("flipping")) continue;
+
+          const front = card.querySelector(".flip-front");
+          const back = card.querySelector(".flip-back");
+          back.textContent = timeStr[i];
+          card.classList.add("flipping");
+
+          const newVal = timeStr[i];
+          card.addEventListener(
+            "animationend",
+            function () {
+              card.classList.remove("flipping");
+              front.textContent = newVal;
+            },
+            { once: true }
+          );
+        }
       }
 
       // --- Fetch state from server and apply ---
