@@ -14,10 +14,14 @@ import announcements
 
 @pytest.fixture(autouse=True)
 def reset_announced():
-    """Clear the announced-events set before each test."""
+    """Clear the announced-events set and discovery cache before each test."""
     announcements._announced_events.clear()
+    announcements._discovery_cache["devices"] = None
+    announcements._discovery_cache["timestamp"] = 0
     yield
     announcements._announced_events.clear()
+    announcements._discovery_cache["devices"] = None
+    announcements._discovery_cache["timestamp"] = 0
 
 
 def _make_event(category, date_str, parsed_date):
@@ -126,32 +130,27 @@ class TestPlayOnDevice:
 class TestCastToSpeakers:
     def test_success(self):
         cast = _mock_cast()
-        browser = MagicMock()
-        with patch("announcements.pychromecast.get_listed_chromecasts",
-                    return_value=([cast], browser)):
+        with patch("announcements._resolve_speaker_host", return_value="192.168.2.24"), \
+             patch("announcements._connect_by_host", return_value=cast):
             result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
         assert result is True
         cast.wait.assert_called_once()
         cast.media_controller.play_media.assert_called_once()
-        browser.stop_discovery.assert_called_once()
+        cast.disconnect.assert_called_once()
 
-    def test_no_device_found(self):
-        browser = MagicMock()
-        with patch("announcements.pychromecast.get_listed_chromecasts",
-                    return_value=([], browser)):
-            result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
-        assert result is False
-        browser.stop_discovery.assert_called_once()
-
-    def test_browser_stopped_on_exception(self):
+    def test_connection_failure_returns_false(self):
         cast = _mock_cast()
         cast.wait.side_effect = RuntimeError("connection lost")
-        browser = MagicMock()
-        with patch("announcements.pychromecast.get_listed_chromecasts",
-                    return_value=([cast], browser)):
-            with pytest.raises(RuntimeError):
-                announcements._cast_to_speakers("http://host:8080/audio.mp3")
-        browser.stop_discovery.assert_called_once()
+        with patch("announcements._resolve_speaker_host", return_value="192.168.2.24"), \
+             patch("announcements._connect_by_host", return_value=cast):
+            result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
+        assert result is False
+        cast.disconnect.assert_called_once()
+
+    def test_returns_false_when_speaker_not_found(self):
+        with patch("announcements._resolve_speaker_host", return_value=None):
+            result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -161,21 +160,19 @@ class TestCastToSpeakers:
 class TestCastToHost:
     def test_success(self):
         cast = _mock_cast()
-        browser = MagicMock()
-        with patch("announcements.pychromecast.get_listed_chromecasts",
-                    return_value=([cast], browser)):
+        with patch("announcements._connect_by_host", return_value=cast):
             result = announcements._cast_to_host("192.168.2.24", "http://host:8080/audio.mp3")
         assert result is True
         cast.media_controller.play_media.assert_called_once()
-        browser.stop_discovery.assert_called_once()
+        cast.disconnect.assert_called_once()
 
-    def test_no_device_at_host(self):
-        browser = MagicMock()
-        with patch("announcements.pychromecast.get_listed_chromecasts",
-                    return_value=([], browser)):
+    def test_connection_failure_returns_false(self):
+        cast = _mock_cast()
+        cast.wait.side_effect = OSError("unreachable")
+        with patch("announcements._connect_by_host", return_value=cast):
             result = announcements._cast_to_host("192.168.2.99", "http://host:8080/audio.mp3")
         assert result is False
-        browser.stop_discovery.assert_called_once()
+        cast.disconnect.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -312,16 +309,23 @@ class TestCheckAndAnnounce:
 # ---------------------------------------------------------------------------
 
 class TestDiscoverDevices:
-    def test_returns_device_list(self):
-        mock_service = MagicMock()
-        mock_service.friendly_name = "Kitchen display"
-        mock_service.model_name = "Google Nest Hub Max"
-        mock_service.host = "192.168.2.24"
-        mock_service.port = 8009
-        mock_service.cast_type = "cast"
-
+    def _mock_browser(self, devices_dict):
         mock_browser = MagicMock()
-        mock_browser.devices = {"fake-uuid": mock_service}
+        mock_browser.devices = devices_dict
+        return mock_browser
+
+    def _mock_service(self, name="Kitchen display", host="192.168.2.24", model="Google Nest Hub Max", cast_type="cast"):
+        svc = MagicMock()
+        svc.friendly_name = name
+        svc.model_name = model
+        svc.host = host
+        svc.port = 8009
+        svc.cast_type = cast_type
+        return svc
+
+    def test_returns_device_list(self):
+        svc = self._mock_service()
+        mock_browser = self._mock_browser({"fake-uuid": svc})
 
         with patch("announcements.pychromecast.CastBrowser", return_value=mock_browser), \
              patch("announcements.pychromecast.SimpleCastListener"), \
@@ -337,8 +341,7 @@ class TestDiscoverDevices:
         mock_browser.stop_discovery.assert_called_once()
 
     def test_empty_network(self):
-        mock_browser = MagicMock()
-        mock_browser.devices = {}
+        mock_browser = self._mock_browser({})
 
         with patch("announcements.pychromecast.CastBrowser", return_value=mock_browser), \
              patch("announcements.pychromecast.SimpleCastListener"), \
@@ -347,3 +350,53 @@ class TestDiscoverDevices:
             devices = announcements.discover_devices(timeout=1)
 
         assert devices == []
+
+    def test_cache_reused_within_ttl(self):
+        svc = self._mock_service()
+        mock_browser = self._mock_browser({"fake-uuid": svc})
+
+        with patch("announcements.pychromecast.CastBrowser", return_value=mock_browser) as mock_cls, \
+             patch("announcements.pychromecast.SimpleCastListener"), \
+             patch("announcements.pychromecast.zeroconf.Zeroconf"), \
+             patch("announcements.time.sleep"):
+            first = announcements.discover_devices(timeout=1)
+            second = announcements.discover_devices(timeout=1)
+
+        assert first == second
+        # CastBrowser should only be created once
+        assert mock_cls.call_count == 1
+
+    def test_cache_expired_triggers_rescan(self):
+        svc = self._mock_service()
+        mock_browser = self._mock_browser({"fake-uuid": svc})
+
+        with patch("announcements.pychromecast.CastBrowser", return_value=mock_browser) as mock_cls, \
+             patch("announcements.pychromecast.SimpleCastListener"), \
+             patch("announcements.pychromecast.zeroconf.Zeroconf"), \
+             patch("announcements.time.sleep"):
+            announcements.discover_devices(timeout=1)
+            # Expire the cache
+            announcements._discovery_cache["timestamp"] = 0
+            announcements.discover_devices(timeout=1)
+
+        assert mock_cls.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# _resolve_speaker_host
+# ---------------------------------------------------------------------------
+
+class TestResolveSpeakerHost:
+    def test_finds_matching_device(self):
+        devices = [{"name": "Kitchen display", "host": "192.168.2.24", "port": 8009}]
+        with patch("announcements.discover_devices", return_value=devices):
+            assert announcements._resolve_speaker_host() == "192.168.2.24"
+
+    def test_returns_none_when_not_found(self):
+        devices = [{"name": "Some Other Device", "host": "192.168.2.99", "port": 8009}]
+        with patch("announcements.discover_devices", return_value=devices):
+            assert announcements._resolve_speaker_host() is None
+
+    def test_returns_none_on_empty_network(self):
+        with patch("announcements.discover_devices", return_value=[]):
+            assert announcements._resolve_speaker_host() is None

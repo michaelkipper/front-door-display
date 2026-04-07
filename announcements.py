@@ -17,9 +17,13 @@ REMINDER_MINUTES = 5
 SPEAKER_NAME = "Kitchen display"
 ANNOUNCEMENT_FILE = os.path.join("static", "announcement.mp3")
 CHECK_INTERVAL_SECONDS = 30
+DISCOVERY_CACHE_SECONDS = 5 * 60  # 5 minutes
 
 # Track announced events to avoid repeats.
 _announced_events = set()
+
+# Cached discovery results: {"devices": [...], "timestamp": float}
+_discovery_cache = {"devices": None, "timestamp": 0}
 
 
 def _get_local_ip():
@@ -49,8 +53,16 @@ def _generate_tts(text):
     logging.info("Generated TTS audio: %s", ANNOUNCEMENT_FILE)
 
 
-def discover_devices(timeout: int = 30) -> list[dict]:
-    """Scan the network for all Chromecast devices and return info about each."""
+def discover_devices(timeout: int = 10) -> list[dict]:
+    """Scan the network for all Chromecast devices and return info about each.
+
+    Results are cached for DISCOVERY_CACHE_SECONDS to avoid repeated network scans.
+    """
+    now_ts = time.time()
+    if _discovery_cache["devices"] is not None and now_ts - _discovery_cache["timestamp"] < DISCOVERY_CACHE_SECONDS:
+        logging.info("Returning cached discovery results (%d devices)", len(_discovery_cache["devices"]))
+        return _discovery_cache["devices"]
+
     logging.info("Scanning for all Chromecast devices (timeout=%ds)...", timeout)
     browser = pychromecast.CastBrowser(
         pychromecast.SimpleCastListener(lambda uuid, name: None),
@@ -78,7 +90,21 @@ def discover_devices(timeout: int = 30) -> list[dict]:
         logging.info("Found %d device(s) on network", len(devices))
     finally:
         browser.stop_discovery()
+
+    _discovery_cache["devices"] = devices
+    _discovery_cache["timestamp"] = now_ts
     return devices
+
+
+def _resolve_speaker_host():
+    """Look up the host IP for SPEAKER_NAME via cached discovery."""
+    devices = discover_devices()
+    for d in devices:
+        if d["name"] == SPEAKER_NAME:
+            logging.info("Resolved '%s' -> %s:%s", SPEAKER_NAME, d["host"], d["port"])
+            return d["host"]
+    logging.error("Device '%s' not found among %d discovered devices", SPEAKER_NAME, len(devices))
+    return None
 
 
 def _play_on_device(cast, audio_url):
@@ -107,40 +133,44 @@ def _play_on_device(cast, audio_url):
     )
 
 
-def _cast_to_speakers(audio_url):
-    """Cast an audio URL to the default speaker."""
-    logging.info("Discovering Chromecast devices matching '%s'...", SPEAKER_NAME)
-    chromecasts, browser = pychromecast.get_listed_chromecasts(
-        friendly_names=[SPEAKER_NAME]
+def _connect_by_host(host):
+    """Connect to a Chromecast directly by IP, bypassing mDNS."""
+    logging.info("Connecting directly to Chromecast at %s...", host)
+    cast = pychromecast.Chromecast(
+        host=host,
     )
-    try:
-        if not chromecasts:
-            logging.error("Device '%s' not found on network", SPEAKER_NAME)
-            return False
+    return cast
 
-        _play_on_device(chromecasts[0], audio_url)
-        logging.info("Announcement cast to '%s'", SPEAKER_NAME)
+
+def _cast_to_speakers(audio_url):
+    """Cast an audio URL to the default speaker, resolved by name."""
+    host = _resolve_speaker_host()
+    if not host:
+        return False
+    cast = _connect_by_host(host)
+    try:
+        _play_on_device(cast, audio_url)
+        logging.info("Announcement cast to '%s' (%s)", SPEAKER_NAME, host)
         return True
+    except Exception:
+        logging.exception("Failed to cast to '%s' (%s)", SPEAKER_NAME, host)
+        return False
     finally:
-        browser.stop_discovery()
+        cast.disconnect()
 
 
 def _cast_to_host(host, audio_url):
     """Cast an audio URL to a specific Chromecast by IP address."""
-    logging.info("Connecting to Chromecast at %s...", host)
-    chromecasts, browser = pychromecast.get_listed_chromecasts(
-        friendly_names=None, known_hosts=[host]
-    )
+    cast = _connect_by_host(host)
     try:
-        if not chromecasts:
-            logging.error("No Chromecast found at %s", host)
-            return False
-
-        _play_on_device(chromecasts[0], audio_url)
+        _play_on_device(cast, audio_url)
         logging.info("Announcement cast to %s", host)
         return True
+    except Exception:
+        logging.exception("Failed to cast to %s", host)
+        return False
     finally:
-        browser.stop_discovery()
+        cast.disconnect()
 
 
 def _broadcast(text, server_port):
