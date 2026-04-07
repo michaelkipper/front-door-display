@@ -133,12 +133,22 @@ def _play_on_device(cast, audio_url):
     )
 
 
-def _connect_by_host(host):
+def _connect_by_host(host, port=8009):
     """Connect to a Chromecast directly by IP, bypassing mDNS."""
-    logging.info("Connecting directly to Chromecast at %s...", host)
-    cast = pychromecast.Chromecast(
+    logging.info("Connecting directly to Chromecast at %s:%s...", host, port)
+    from uuid import UUID
+    service = pychromecast.HostServiceInfo(host=host, port=port)
+    cast_info = pychromecast.CastInfo(
+        services={service},
+        uuid=UUID(int=0),
+        model_name=None,
+        friendly_name=None,
         host=host,
+        port=port,
+        cast_type="cast",
+        manufacturer=None,
     )
+    cast = pychromecast.Chromecast(cast_info)
     return cast
 
 
