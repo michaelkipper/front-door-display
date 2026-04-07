@@ -49,20 +49,25 @@ def _generate_tts(text):
     logging.info("Generated TTS audio: %s", ANNOUNCEMENT_FILE)
 
 
-def discover_devices(timeout=5):
+def discover_devices(timeout: int = 30) -> list[dict]:
     """Scan the network for all Chromecast devices and return info about each."""
     logging.info("Scanning for all Chromecast devices (timeout=%ds)...", timeout)
-    chromecasts, browser = pychromecast.get_chromecasts(timeout=timeout)
+    browser = pychromecast.CastBrowser(
+        pychromecast.SimpleCastListener(lambda uuid, name: None),
+        pychromecast.zeroconf.Zeroconf(),
+    )
+    browser.start_discovery()
+    time.sleep(timeout)
     devices = []
     try:
-        for cc in chromecasts:
+        for uuid, service in browser.devices.items():
             info = {
-                "name": cc.name,
-                "model": cc.model_name,
-                "host": cc.host,
-                "port": cc.port,
-                "uuid": str(cc.uuid),
-                "cast_type": cc.cast_type,
+                "name": service.friendly_name,
+                "model": service.model_name,
+                "host": str(service.host),
+                "port": service.port,
+                "uuid": str(uuid),
+                "cast_type": service.cast_type,
             }
             devices.append(info)
             logging.info(
