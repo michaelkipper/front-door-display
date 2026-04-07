@@ -365,10 +365,15 @@ def get_calendar_state(now):
     # Candle lighting / Havdalah display
     candle_lighting_text = None
     havdalah_text = None
+    next_event_epoch = None
     if candle_events:
         candle_lighting_text = _format_time_12h(candle_events[0]["parsed_date"])
+        _dt = candle_events[0]["parsed_date"]
+        next_event_epoch = int(_dt.replace(tzinfo=None).timestamp()) if _dt.tzinfo else int(_dt.timestamp())
     elif havdalah_events:
         havdalah_text = _format_time_12h(havdalah_events[0]["parsed_date"])
+        _dt = havdalah_events[0]["parsed_date"]
+        next_event_epoch = int(_dt.replace(tzinfo=None).timestamp()) if _dt.tzinfo else int(_dt.timestamp())
 
     holiday_events = [e for e in events if e["is_holiday"]]
     yom_tov_events = [e for e in events if e["is_yom_tov"]]
@@ -407,6 +412,7 @@ def get_calendar_state(now):
     return {
         "candle_lighting": candle_lighting_text,
         "havdalah": havdalah_text,
+        "next_event_epoch": next_event_epoch,
         "holiday_name": holiday_name,
         "show_shabbat_background": show_shabbat_bg,
         "display_class": display_class,
@@ -509,6 +515,7 @@ def api_state():
         "is_shabbat": cal_state["is_shabbat"],
         "is_yom_tov": cal_state["is_yom_tov"],
         "omer_count": cal_state["omer_count"],
+        "next_event_epoch": cal_state["next_event_epoch"],
     })
 
 

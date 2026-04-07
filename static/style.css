@@ -227,6 +227,12 @@ body.shabbat-background {
   background-color: #c82333;
   border-color: #ff7f7f;
 }
+.controls-sep {
+  color: #555;
+  font-size: 2vw;
+  align-self: center;
+  user-select: none;
+}
 
 /* Styling for the weather info in the bottom left */
 #weather-info {

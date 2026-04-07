@@ -12,6 +12,7 @@
     />
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/water_meter.css" />
+    <link rel="stylesheet" href="/static/hourglass.css" />
   </head>
   <body>
     <!-- Invisible trigger for offset controls -->
@@ -26,6 +27,11 @@
       <button data-offset-ms="10800000">+3h</button>
       <button data-offset-ms="21600000">+6h</button>
       <button data-offset-ms="86400000">+1d</button>
+      <span class="controls-sep">|</span>
+      <button data-hourglass="15">⏳15m</button>
+      <button data-hourglass="5">⏳5m</button>
+      <button data-hourglass="1">⏳1m</button>
+      <button data-hourglass="stop">⏳off</button>
       <button data-action="close">&times;</button>
     </div>
 
@@ -51,6 +57,12 @@
 
     <!-- Water meter reading (lower-right) -->
     <div id="water-reading">-- m³</div>
+
+    <!-- Hourglass countdown (right edge) -->
+    <div id="hourglass-container">
+      <canvas id="hourglass-canvas"></canvas>
+      <div id="hourglass-countdown"></div>
+    </div>
 
     <!-- Water usage graph overlay -->
     <div id="water-overlay">
@@ -256,6 +268,11 @@
           document.body.style.backgroundImage = "";
           lastBackgroundImage = null;
         }
+
+        // Hourglass countdown (skip if debug override active)
+        if (window.hourglassUpdate && !window.hourglassDebug) {
+          window.hourglassUpdate(state.next_event_epoch || null);
+        }
       }
 
       // --- Offset controls ---
@@ -269,6 +286,20 @@
 
         if (button.dataset.action === "close") {
           offsetControlsEl.classList.remove("visible");
+          return;
+        }
+
+        // Hourglass debug buttons
+        if (button.dataset.hourglass) {
+          if (button.dataset.hourglass === "stop") {
+            window.hourglassDebug = false;
+            window.hourglassUpdate(null);
+          } else {
+            var mins = parseInt(button.dataset.hourglass, 10);
+            var epoch = Date.now() / 1000 + mins * 60;
+            window.hourglassDebug = true;
+            window.hourglassUpdate(epoch);
+          }
           return;
         }
 
@@ -318,6 +349,7 @@
       setInterval(updateClock, 1000);
       setInterval(fetchState, 30000);
     </script>
+    <script src="/static/hourglass.js"></script>
     <script src="/static/water_meter.js"></script>
   </body>
 </html>
