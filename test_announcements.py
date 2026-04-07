@@ -17,10 +17,12 @@ def reset_announced():
     """Clear the announced-events set and discovery cache before each test."""
     announcements._announced_events.clear()
     announcements._discovery_cache["devices"] = None
+    announcements._discovery_cache["cast_infos"] = {}
     announcements._discovery_cache["timestamp"] = 0
     yield
     announcements._announced_events.clear()
     announcements._discovery_cache["devices"] = None
+    announcements._discovery_cache["cast_infos"] = {}
     announcements._discovery_cache["timestamp"] = 0
 
 
@@ -130,8 +132,11 @@ class TestPlayOnDevice:
 class TestCastToSpeakers:
     def test_success(self):
         cast = _mock_cast()
-        with patch("announcements._resolve_speaker_host", return_value="192.168.2.24"), \
-             patch("announcements._connect_by_host", return_value=cast):
+        fake_cast_info = MagicMock()
+        fake_cast_info.host = "192.168.2.24"
+        fake_cast_info.port = 8009
+        with patch("announcements._resolve_speaker_cast_info", return_value=fake_cast_info), \
+             patch("announcements._connect_by_cast_info", return_value=cast):
             result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
         assert result is True
         cast.wait.assert_called_once()
@@ -141,14 +146,16 @@ class TestCastToSpeakers:
     def test_connection_failure_returns_false(self):
         cast = _mock_cast()
         cast.wait.side_effect = RuntimeError("connection lost")
-        with patch("announcements._resolve_speaker_host", return_value="192.168.2.24"), \
-             patch("announcements._connect_by_host", return_value=cast):
+        fake_cast_info = MagicMock()
+        fake_cast_info.host = "192.168.2.24"
+        with patch("announcements._resolve_speaker_cast_info", return_value=fake_cast_info), \
+             patch("announcements._connect_by_cast_info", return_value=cast):
             result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
         assert result is False
         cast.disconnect.assert_called_once()
 
     def test_returns_false_when_speaker_not_found(self):
-        with patch("announcements._resolve_speaker_host", return_value=None):
+        with patch("announcements._resolve_speaker_cast_info", return_value=None):
             result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
         assert result is False
 
@@ -386,17 +393,26 @@ class TestDiscoverDevices:
 # _resolve_speaker_host
 # ---------------------------------------------------------------------------
 
-class TestResolveSpeakerHost:
+class TestResolveSpeakerCastInfo:
     def test_finds_matching_device(self):
+        fake_cast_info = MagicMock()
+        fake_cast_info.host = "192.168.2.24"
+        fake_cast_info.port = 8009
+        fake_cast_info.friendly_name = "Kitchen display"
         devices = [{"name": "Kitchen display", "host": "192.168.2.24", "port": 8009}]
         with patch("announcements.discover_devices", return_value=devices):
-            assert announcements._resolve_speaker_host() == "192.168.2.24"
+            announcements._discovery_cache["cast_infos"] = {"Kitchen display": fake_cast_info}
+            result = announcements._resolve_speaker_cast_info()
+        assert result is fake_cast_info
 
     def test_returns_none_when_not_found(self):
         devices = [{"name": "Some Other Device", "host": "192.168.2.99", "port": 8009}]
         with patch("announcements.discover_devices", return_value=devices):
-            assert announcements._resolve_speaker_host() is None
+            announcements._discovery_cache["cast_infos"] = {"Some Other Device": MagicMock()}
+            result = announcements._resolve_speaker_cast_info()
+        assert result is None
 
     def test_returns_none_on_empty_network(self):
         with patch("announcements.discover_devices", return_value=[]):
-            assert announcements._resolve_speaker_host() is None
+            result = announcements._resolve_speaker_cast_info()
+        assert result is None

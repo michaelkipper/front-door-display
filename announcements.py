@@ -22,8 +22,8 @@ DISCOVERY_CACHE_SECONDS = 5 * 60  # 5 minutes
 # Track announced events to avoid repeats.
 _announced_events = set()
 
-# Cached discovery results: {"devices": [...], "timestamp": float}
-_discovery_cache = {"devices": None, "timestamp": 0}
+# Cached discovery results: {"devices": [...], "cast_infos": {name: CastInfo}, "timestamp": float}
+_discovery_cache = {"devices": None, "cast_infos": {}, "timestamp": 0}
 
 
 def _get_local_ip():
@@ -57,6 +57,7 @@ def discover_devices(timeout: int = 10) -> list[dict]:
     """Scan the network for all Chromecast devices and return info about each.
 
     Results are cached for DISCOVERY_CACHE_SECONDS to avoid repeated network scans.
+    Also caches the real CastInfo objects so we can connect without re-discovery.
     """
     now_ts = time.time()
     if _discovery_cache["devices"] is not None and now_ts - _discovery_cache["timestamp"] < DISCOVERY_CACHE_SECONDS:
@@ -71,6 +72,7 @@ def discover_devices(timeout: int = 10) -> list[dict]:
     browser.start_discovery()
     time.sleep(timeout)
     devices = []
+    cast_infos = {}
     try:
         for uuid, service in browser.devices.items():
             info = {
@@ -82,6 +84,8 @@ def discover_devices(timeout: int = 10) -> list[dict]:
                 "cast_type": service.cast_type,
             }
             devices.append(info)
+            if service.friendly_name:
+                cast_infos[service.friendly_name] = service
             logging.info(
                 "  Device: name='%s', model='%s', host=%s:%s, uuid=%s, type=%s",
                 info["name"], info["model"], info["host"], info["port"],
@@ -92,19 +96,21 @@ def discover_devices(timeout: int = 10) -> list[dict]:
         browser.stop_discovery()
 
     _discovery_cache["devices"] = devices
+    _discovery_cache["cast_infos"] = cast_infos
     _discovery_cache["timestamp"] = now_ts
     return devices
 
 
-def _resolve_speaker_host():
-    """Look up the host IP for SPEAKER_NAME via cached discovery."""
-    devices = discover_devices()
-    for d in devices:
-        if d["name"] == SPEAKER_NAME:
-            logging.info("Resolved '%s' -> %s:%s", SPEAKER_NAME, d["host"], d["port"])
-            return d["host"]
-    logging.error("Device '%s' not found among %d discovered devices", SPEAKER_NAME, len(devices))
-    return None
+def _resolve_speaker_cast_info():
+    """Look up the CastInfo for SPEAKER_NAME via cached discovery."""
+    discover_devices()
+    cast_info = _discovery_cache["cast_infos"].get(SPEAKER_NAME)
+    if cast_info:
+        logging.info("Resolved '%s' -> %s:%s", SPEAKER_NAME, cast_info.host, cast_info.port)
+    else:
+        logging.error("Device '%s' not found among %d discovered devices",
+                       SPEAKER_NAME, len(_discovery_cache["devices"] or []))
+    return cast_info
 
 
 def _play_on_device(cast, audio_url):
@@ -133,8 +139,15 @@ def _play_on_device(cast, audio_url):
     )
 
 
+def _connect_by_cast_info(cast_info):
+    """Connect to a Chromecast using a discovered CastInfo."""
+    logging.info("Connecting to Chromecast '%s' at %s:%s...",
+                 cast_info.friendly_name, cast_info.host, cast_info.port)
+    return pychromecast.Chromecast(cast_info)
+
+
 def _connect_by_host(host, port=8009):
-    """Connect to a Chromecast directly by IP, bypassing mDNS."""
+    """Connect to a Chromecast directly by IP (fallback for /api/test-announcement?host=)."""
     logging.info("Connecting directly to Chromecast at %s:%s...", host, port)
     from uuid import UUID
     service = pychromecast.HostServiceInfo(host=host, port=port)
@@ -148,22 +161,21 @@ def _connect_by_host(host, port=8009):
         cast_type="cast",
         manufacturer=None,
     )
-    cast = pychromecast.Chromecast(cast_info)
-    return cast
+    return pychromecast.Chromecast(cast_info)
 
 
 def _cast_to_speakers(audio_url):
     """Cast an audio URL to the default speaker, resolved by name."""
-    host = _resolve_speaker_host()
-    if not host:
+    cast_info = _resolve_speaker_cast_info()
+    if not cast_info:
         return False
-    cast = _connect_by_host(host)
+    cast = _connect_by_cast_info(cast_info)
     try:
         _play_on_device(cast, audio_url)
-        logging.info("Announcement cast to '%s' (%s)", SPEAKER_NAME, host)
+        logging.info("Announcement cast to '%s' (%s)", SPEAKER_NAME, cast_info.host)
         return True
     except Exception:
-        logging.exception("Failed to cast to '%s' (%s)", SPEAKER_NAME, host)
+        logging.exception("Failed to cast to '%s' (%s)", SPEAKER_NAME, cast_info.host)
         return False
     finally:
         cast.disconnect()
