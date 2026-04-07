@@ -19,6 +19,7 @@ import time
 from flask import Flask, jsonify, request, send_from_directory
 
 from image_gen import CURRENT_IMAGE, generate_image, has_current_image
+from stocks import fetch_quotes as fetch_stock_quotes
 from water_meter import fetch_reading as fetch_water_reading, get_current_reading as get_water_reading, get_history as get_water_history
 
 _PORT = flags.DEFINE_integer("port", 8080, "Port to listen on")
@@ -530,6 +531,8 @@ def api_state():
     weather = fetch_weather()
     cal_state = get_calendar_state(now)
 
+    stocks = fetch_stock_quotes()
+
     return jsonify({
         "weather": weather,
         "candle_lighting": cal_state["candle_lighting"],
@@ -542,6 +545,7 @@ def api_state():
         "is_yom_tov": cal_state["is_yom_tov"],
         "omer_count": cal_state["omer_count"],
         "next_event_epoch": cal_state["next_event_epoch"],
+        "stocks": stocks,
     })
 
 

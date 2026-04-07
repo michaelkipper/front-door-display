@@ -52,6 +52,9 @@
     <!-- This element will show Shabbat start/end times -->
     <div id="shabbat-time-info"></div>
 
+    <!-- Stock tickers (left side) -->
+    <div id="stock-tickers"></div>
+
     <!-- Bottom weather bar: current + forecast -->
     <div id="weather-bar">
       <div id="weather-info"></div>
@@ -239,6 +242,24 @@
         } else {
           weatherInfoEl.innerHTML = "<span>--°C</span>";
           document.getElementById("weather-forecast").style.display = "none";
+        }
+
+        // Stocks
+        if (state.stocks && state.stocks.length) {
+          var stockEl = document.getElementById("stock-tickers");
+          var html = "";
+          for (var i = 0; i < state.stocks.length; i++) {
+            var s = state.stocks[i];
+            var sign = s.change_pct >= 0 ? "+" : "";
+            var cls = s.change_pct >= 0 ? "stock-up" : "stock-down";
+            html += '<div class="stock-item">' +
+              '<span class="stock-symbol">' + s.symbol + '</span>' +
+              '<span class="stock-price">' + (s.price != null ? s.price.toFixed(2) : '--') + '</span>' +
+              '<span class="stock-change ' + cls + '">' + sign + s.change_pct.toFixed(2) + '%</span>' +
+              '</div>';
+          }
+          stockEl.innerHTML = html;
+          stockEl.style.display = "flex";
         }
 
         // Holiday info

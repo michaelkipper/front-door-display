@@ -234,6 +234,46 @@ body.shabbat-background {
   user-select: none;
 }
 
+/* Stock tickers — left side */
+#stock-tickers {
+  position: absolute;
+  left: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #eaeaea;
+  opacity: 0.8;
+}
+.stock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+.stock-symbol {
+  font-size: 1.8vw;
+  font-weight: 500;
+  opacity: 0.7;
+}
+.stock-price {
+  font-size: 2.4vw;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.stock-change {
+  font-size: 1.8vw;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.stock-up {
+  color: #22c55e;
+}
+.stock-down {
+  color: #ef4444;
+}
+
 /* Bottom weather bar */
 #weather-bar {
   position: absolute;
@@ -351,6 +391,15 @@ body.shabbat-background {
     font-size: 16px;
   }
   .forecast-temp {
+    font-size: 22px;
+  }
+  .stock-symbol {
+    font-size: 22px;
+  }
+  .stock-price {
+    font-size: 28px;
+  }
+  .stock-change {
     font-size: 22px;
   }
 }
