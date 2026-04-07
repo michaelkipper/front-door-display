@@ -8,7 +8,9 @@ and background image data. Generates new images hourly via Gemini.
 from absl import app
 from absl import flags
 from absl import logging
+from collections import defaultdict
 from datetime import datetime, timedelta
+import logging as py_logging
 import os
 import requests
 import threading
@@ -63,7 +65,7 @@ _weather_cache = {"data": None, "timestamp": 0}
 WEATHER_CACHE_SECONDS = 15 * 60  # 15 minutes
 
 # Calendar cache (keyed by date string YYYY-MM-DD)
-_calendar_cache = {"events_by_date": {}}
+_calendar_cache = defaultdict()
 _last_prefetch_date_key = None
 
 # Image generation timestamp
@@ -195,7 +197,7 @@ def _fetch_calendar_events(now):
     global _last_calendar_error_log
 
     date_key = now.strftime("%Y-%m-%d")
-    cached_events = _calendar_cache["events_by_date"].get(date_key)
+    cached_events = _calendar_cache.get(date_key)
     if cached_events is not None:
         return cached_events
 
@@ -227,21 +229,21 @@ def _fetch_calendar_events(now):
                 "is_candle_lighting": item.get("category") == "candles",
                 "is_havdalah": item.get("category") == "havdalah",
             })
-        _calendar_cache["events_by_date"][date_key] = events
+        _calendar_cache[date_key] = events
 
         # Keep cache bounded to a few recent day-keys.
-        if len(_calendar_cache["events_by_date"]) > 4:
-            for old_key in sorted(_calendar_cache["events_by_date"].keys())[:-4]:
-                del _calendar_cache["events_by_date"][old_key]
+        if len(_calendar_cache) > 4:
+            for old_key in sorted(_calendar_cache.keys())[:-4]:
+                del _calendar_cache[old_key]
 
-        logging.info("Fetched %d calendar events from Hebcal", len(events))
+        logging.info("Fetched %d calendar events from Hebcal for %s", len(events), date_key)
         return events
     except requests.RequestException as exc:
         _last_calendar_error_log = _log_throttled(
             _last_calendar_error_log,
             f"Calendar fetch failed; using cached events: {exc}",
         )
-        return _calendar_cache["events_by_date"].get(date_key, [])
+        return _calendar_cache.get(date_key, [])
 
 
 def _prefetch_tomorrow_events_if_needed(now):
@@ -260,7 +262,7 @@ def _prefetch_tomorrow_events_if_needed(now):
 
     if _last_prefetch_date_key == tomorrow_key:
         return
-    if tomorrow_key in _calendar_cache["events_by_date"]:
+    if tomorrow_key in _calendar_cache:
         _last_prefetch_date_key = tomorrow_key
         return
 
@@ -469,6 +471,9 @@ def serve_image(filename):
 
 def main(argv):
     del argv
+
+    # Silence per-request access logs from Flask's dev server to prevent log spam.
+    py_logging.getLogger("werkzeug").setLevel(py_logging.ERROR)
 
     # Generate an initial image on startup if none exists and it's daytime
     now = _now()
