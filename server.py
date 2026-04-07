@@ -176,17 +176,43 @@ def fetch_weather():
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={LATITUDE}&longitude={LONGITUDE}"
         f"&current=temperature_2m,weather_code"
+        f"&hourly=temperature_2m,weather_code"
         f"&daily=temperature_2m_max,temperature_2m_min"
         f"&temperature_unit=celsius&timezone=auto"
     )
 
     try:
         data = _get_json_with_retries(url, "Open-Meteo")
+
+        # Build 2-hour interval forecast for the next 8 hours
+        forecast = []
+        hourly_times = data.get("hourly", {}).get("time", [])
+        hourly_temps = data.get("hourly", {}).get("temperature_2m", [])
+        hourly_codes = data.get("hourly", {}).get("weather_code", [])
+        current_time = data.get("current", {}).get("time", "")
+        if hourly_times and current_time:
+            # Find the index of the next hour after current time
+            start_idx = 0
+            for i, t in enumerate(hourly_times):
+                if t > current_time:
+                    start_idx = i
+                    break
+            # Pick every 2 hours, up to 4 entries (covers 8 hours)
+            for step in range(4):
+                idx = start_idx + step * 2
+                if idx < len(hourly_times):
+                    forecast.append({
+                        "time": hourly_times[idx],
+                        "temp": round(hourly_temps[idx]),
+                        "code": hourly_codes[idx],
+                    })
+
         result = {
             "temp": round(data["current"]["temperature_2m"]),
             "code": data["current"]["weather_code"],
             "high": round(data["daily"]["temperature_2m_max"][0]),
             "low": round(data["daily"]["temperature_2m_min"][0]),
+            "forecast": forecast,
         }
         _weather_cache["data"] = result
         _weather_cache["timestamp"] = now_ts

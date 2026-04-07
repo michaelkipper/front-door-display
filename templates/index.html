@@ -52,8 +52,11 @@
     <!-- This element will show Shabbat start/end times -->
     <div id="shabbat-time-info"></div>
 
-    <!-- This element shows the current weather -->
-    <div id="weather-info"></div>
+    <!-- Bottom weather bar: current + forecast -->
+    <div id="weather-bar">
+      <div id="weather-info"></div>
+      <div id="weather-forecast"></div>
+    </div>
 
     <!-- Water meter reading (lower-right) -->
     <div id="water-reading">-- m³</div>
@@ -212,8 +215,30 @@
             "    <span>L: " + w.low + "°</span>" +
             "  </div>" +
             "</div>";
+          // Forecast
+          var fcEl = document.getElementById("weather-forecast");
+          if (w.forecast && w.forecast.length) {
+            var html = "";
+            for (var i = 0; i < w.forecast.length; i++) {
+              var f = w.forecast[i];
+              var hour = new Date(f.time).getHours();
+              var ampm = hour >= 12 ? "PM" : "AM";
+              var h12 = hour % 12 || 12;
+              html += '<div class="forecast-item">' +
+                '<span class="forecast-time">' + h12 + ampm + '</span>' +
+                getWeatherIcon(f.code) +
+                '<span class="forecast-temp">' + f.temp + '°</span>' +
+                '</div>';
+            }
+            fcEl.innerHTML = html;
+            fcEl.style.display = "flex";
+          } else {
+            fcEl.innerHTML = "";
+            fcEl.style.display = "none";
+          }
         } else {
           weatherInfoEl.innerHTML = "<span>--°C</span>";
+          document.getElementById("weather-forecast").style.display = "none";
         }
 
         // Holiday info
