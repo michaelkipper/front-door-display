@@ -39,6 +39,7 @@
       <!-- This element's class will be changed by the script -->
       <div id="date-display" class="date">Monday, 1 January</div>
       <div id="holiday-info" class="date" style="display:none">Holiday Info</div>
+      <div id="omer-info" class="omer" style="display:none"></div>
     </div>
 
     <!-- This element will show Shabbat start/end times -->
@@ -55,6 +56,7 @@
       const pmIndicator = document.getElementById("pm-indicator");
       const shabbatInfoEl = document.getElementById("shabbat-time-info");
       const holidayInfoEl = document.getElementById("holiday-info");
+      const omerInfoEl = document.getElementById("omer-info");
       const weatherInfoEl = document.getElementById("weather-info");
       const offsetControlsEl = document.getElementById("offset-controls");
       const offsetTriggerEl = document.getElementById("offset-trigger");
@@ -136,6 +138,14 @@
           holidayInfoEl.style.display = "block";
         } else {
           holidayInfoEl.style.display = "none";
+        }
+
+        // Omer count
+        if (state.omer_count) {
+          omerInfoEl.textContent = state.omer_count;
+          omerInfoEl.style.display = "block";
+        } else {
+          omerInfoEl.style.display = "none";
         }
 
         // Date display class

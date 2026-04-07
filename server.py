@@ -113,6 +113,22 @@ def _format_time_12h(dt):
     return f"{hour}:{minute} {ampm}"
 
 
+def _format_omer_count(day):
+    """Format an Omer day number into a display string with weeks and days."""
+    if not day or day < 1 or day > 49:
+        return None
+    weeks, days = divmod(day, 7)
+    parts = [f"Day {day} of the Omer"]
+    if weeks and not days:
+        parts.append(f"{weeks} {'week' if weeks == 1 else 'weeks'}")
+    elif weeks:
+        parts.append(
+            f"{weeks} {'week' if weeks == 1 else 'weeks'}, "
+            f"{days} {'day' if days == 1 else 'days'}"
+        )
+    return " · ".join(parts)
+
+
 def _log_throttled(last_log_ts, message, interval_seconds=300):
     """Log a warning at most once per interval to avoid log spam."""
     now_ts = time.time()
@@ -207,7 +223,7 @@ def _fetch_calendar_events(now):
     url = (
         f"https://www.hebcal.com/hebcal"
         f"?v=1&cfg=json&start={start}&end={end}"
-        f"&maj=on&min=on&c=on"
+        f"&maj=on&min=on&c=on&omer=on"
         f"&latitude={LATITUDE}&longitude={LONGITUDE}"
         f"&b={CANDLE_LIGHTING_MINUTES}&m={HAVDALAH_MINUTES}&s=on"
     )
@@ -228,6 +244,8 @@ def _fetch_calendar_events(now):
                 "is_yom_tov": item.get("yomtov") is True,
                 "is_candle_lighting": item.get("category") == "candles",
                 "is_havdalah": item.get("category") == "havdalah",
+                "is_omer": item.get("category") == "omer",
+                "omer_day": item.get("omer"),
             })
         _calendar_cache[date_key] = events
 
@@ -352,6 +370,7 @@ def get_calendar_state(now):
     holiday_events = [e for e in events if e["is_holiday"]]
     yom_tov_events = [e for e in events if e["is_yom_tov"]]
     shabbat_events = [e for e in events if e["is_shabbat"]]
+    omer_events = [e for e in events if e.get("is_omer")]
 
     # Display priority: Yom Tov > Shabbat > holiday > regular
     show_shabbat_bg = False
@@ -372,6 +391,11 @@ def get_calendar_state(now):
         holiday_name = holiday_events[0]["title"]
         display_class = "shabbat"
 
+    # Omer count
+    omer_count = None
+    if omer_events:
+        omer_count = _format_omer_count(omer_events[0]["omer_day"])
+
     # Background image
     bg_image = None
     if has_current_image():
@@ -387,6 +411,7 @@ def get_calendar_state(now):
         "is_shabbat": currently_shabbat,
         "is_yom_tov": bool(yom_tov_events),
         "events": events,
+        "omer_count": omer_count,
     }
 
 
@@ -443,6 +468,7 @@ def api_state():
         "background_image": cal_state["background_image"],
         "is_shabbat": cal_state["is_shabbat"],
         "is_yom_tov": cal_state["is_yom_tov"],
+        "omer_count": cal_state["omer_count"],
     })
 
 

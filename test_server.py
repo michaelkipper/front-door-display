@@ -38,6 +38,19 @@ REGULAR_SHABBAT_API_RESPONSE = {
     ]
 }
 
+OMER_API_RESPONSE = {
+    "items": [
+        {"title": "Pesach IV (CH''M)", "date": "2026-04-05", "category": "holiday", "subcat": "major"},
+        {"title": "3rd day of the Omer", "date": "2026-04-05", "category": "omer", "omer": 3},
+    ]
+}
+
+OMER_WEEK_API_RESPONSE = {
+    "items": [
+        {"title": "14th day of the Omer", "date": "2026-04-16", "category": "omer", "omer": 14},
+    ]
+}
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -261,6 +274,64 @@ class TestHavdalahDisplay:
 
         assert state["havdalah"] is not None
         assert "8:31" in state["havdalah"]
+
+
+# ---------------------------------------------------------------------------
+# Omer counting tests
+# ---------------------------------------------------------------------------
+
+class TestOmerCounting:
+    def test_format_omer_day_only(self):
+        """Days without full weeks should show just the day."""
+        import server
+        assert server._format_omer_count(3) == "Day 3 of the Omer"
+
+    def test_format_omer_exact_weeks(self):
+        """Exact week multiples should show weeks."""
+        import server
+        assert server._format_omer_count(7) == "Day 7 of the Omer · 1 week"
+        assert server._format_omer_count(14) == "Day 14 of the Omer · 2 weeks"
+        assert server._format_omer_count(49) == "Day 49 of the Omer · 7 weeks"
+
+    def test_format_omer_weeks_and_days(self):
+        """Mixed weeks and days should show both."""
+        import server
+        assert server._format_omer_count(8) == "Day 8 of the Omer · 1 week, 1 day"
+        assert server._format_omer_count(18) == "Day 18 of the Omer · 2 weeks, 4 days"
+
+    def test_format_omer_invalid(self):
+        """Out-of-range or missing values should return None."""
+        import server
+        assert server._format_omer_count(0) is None
+        assert server._format_omer_count(50) is None
+        assert server._format_omer_count(None) is None
+
+    def test_omer_in_calendar_state(self):
+        """Calendar state should include omer_count during the Omer."""
+        import server
+        with patch("server.requests.get", return_value=_mock_hebcal(OMER_API_RESPONSE)):
+            sunday = datetime(2026, 4, 5, 12, 0, 0)
+            state = server.get_calendar_state(sunday)
+
+        assert state["omer_count"] == "Day 3 of the Omer"
+
+    def test_no_omer_outside_period(self):
+        """Calendar state should have no omer_count outside the Omer period."""
+        import server
+        with patch("server.requests.get", return_value=_mock_hebcal(REGULAR_SHABBAT_API_RESPONSE)):
+            saturday = datetime(2026, 4, 11, 12, 0, 0)
+            state = server.get_calendar_state(saturday)
+
+        assert state["omer_count"] is None
+
+    def test_omer_exact_week_in_calendar_state(self):
+        """Calendar state should format exact weeks correctly."""
+        import server
+        with patch("server.requests.get", return_value=_mock_hebcal(OMER_WEEK_API_RESPONSE)):
+            thursday = datetime(2026, 4, 16, 12, 0, 0)
+            state = server.get_calendar_state(thursday)
+
+        assert state["omer_count"] == "Day 14 of the Omer · 2 weeks"
 
 
 # ---------------------------------------------------------------------------
