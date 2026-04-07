@@ -16,7 +16,7 @@
   if (!readingEl || !overlay || !canvas || !closeBtn) return;
 
   const ctx = canvas.getContext("2d");
-  const POLL_MS = 5000;
+  const POLL_MS = 2500;
 
   // --- Reading display ---
   async function refreshReading() {
