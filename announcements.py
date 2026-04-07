@@ -85,7 +85,8 @@ def _play_on_device(cast, audio_url):
     """Play audio on an already-discovered Chromecast device."""
     logging.info(
         "Casting to device: name='%s', model='%s', host=%s:%s, uuid=%s",
-        cast.name, cast.model_name, cast.host, cast.port, cast.uuid,
+        cast.name, cast.model_name,
+        cast.socket_client.host, cast.socket_client.port, cast.uuid,
     )
     cast.wait()
     logging.info(
