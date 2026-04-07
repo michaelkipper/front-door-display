@@ -1,8 +1,10 @@
 """
-Image generation using Gemini 2.5 Flash via the Batch API.
+Image generation using Gemini 2.5 Flash.
 
 Generates context-aware background images based on weather, holiday,
-time of day, and season. Uses the Batch API for 50% cost savings.
+time of day, and season. Supports both synchronous (standard) and batch
+API modes. Batch is 50% cheaper but takes several minutes; sync is used
+when an image is needed immediately (e.g. cold start or stale state).
 Images are saved to the images/ directory.
 """
 
@@ -173,18 +175,20 @@ def build_image_prompt(weather, calendar_state, now):
     return prompt
 
 
-def generate_image(api_key, weather, calendar_state, now):
+def generate_image(api_key, weather, calendar_state, now, use_batch=True):
     """
-    Generate an image using the Gemini Batch API (50% cheaper) and save it.
+    Generate an image using Gemini and save it.
 
-    Submits an inline batch job, polls until complete, then extracts and
-    saves the image. Blocking — call from a background thread.
+    When use_batch=True (default), submits a batch job for 50% cost savings
+    but takes several minutes. When use_batch=False, uses the standard
+    synchronous API for an immediate result.
 
     Args:
         api_key: Gemini API key string
         weather: dict with weather data (or None)
         calendar_state: dict with calendar state
         now: datetime object
+        use_batch: if True use Batch API (cheaper), if False use sync API (faster)
     Returns:
         str: path to saved image, or None on failure
     """
@@ -194,27 +198,20 @@ def generate_image(api_key, weather, calendar_state, now):
 
     prompt = build_image_prompt(weather, calendar_state, now)
     logging.info("Image prompt: %s", prompt)
+    mode = "batch" if use_batch else "sync"
 
     try:
         client = genai.Client(api_key=api_key)
 
-        batch_job = None
+        image_data = None
         used_model = None
+
         for model_name in MODEL_CANDIDATES:
             try:
-                batch_job = client.batches.create(
-                    model=model_name,
-                    src=[{
-                        "contents": [{
-                            "parts": [{"text": prompt}],
-                            "role": "user",
-                        }],
-                        "config": {
-                            "response_modalities": ["IMAGE"],
-                        },
-                    }],
-                    config={"display_name": "front-door-image"},
-                )
+                if use_batch:
+                    image_data = _generate_via_batch(client, model_name, prompt)
+                else:
+                    image_data = _generate_via_sync(client, model_name, prompt)
                 used_model = model_name
                 break
             except genai_errors.ClientError as exc:
@@ -223,38 +220,13 @@ def generate_image(api_key, weather, calendar_state, now):
                     continue
                 raise
 
-        if batch_job is None:
+        if used_model is None:
             logging.error(
                 "No supported Gemini image model found. Tried: %s",
                 ", ".join(MODEL_CANDIDATES),
             )
             return None
 
-        logging.info("Submitted batch job %s using %s", batch_job.name, used_model)
-
-        # Poll until the job finishes
-        completed_states = {
-            "JOB_STATE_SUCCEEDED",
-            "JOB_STATE_FAILED",
-            "JOB_STATE_CANCELLED",
-            "JOB_STATE_EXPIRED",
-            "JOB_STATE_PARTIALLY_SUCCEEDED",
-        }
-
-        while batch_job.state.name not in completed_states:
-            time.sleep(BATCH_POLL_INTERVAL_SECONDS)
-            batch_job = client.batches.get(name=batch_job.name)
-            logging.info("Batch job %s state: %s", batch_job.name, batch_job.state.name)
-
-        if batch_job.state.name != "JOB_STATE_SUCCEEDED":
-            logging.error(
-                "Batch job %s finished with state %s: %s",
-                batch_job.name, batch_job.state.name, batch_job.error,
-            )
-            return None
-
-        # Extract image data from inline response
-        image_data = _extract_image_from_batch(batch_job)
         if image_data is None:
             return None
 
@@ -264,12 +236,74 @@ def generate_image(api_key, weather, calendar_state, now):
         with open(CURRENT_IMAGE, "wb") as f:
             f.write(image_data)
 
-        logging.info("Generated and saved new image to %s using %s (batch)", CURRENT_IMAGE, used_model)
+        logging.info("Generated and saved new image to %s using %s (%s)", CURRENT_IMAGE, used_model, mode)
         return CURRENT_IMAGE
 
     except Exception:
-        logging.exception("Failed to generate image via Gemini batch")
+        logging.exception("Failed to generate image via Gemini (%s)", mode)
         return None
+
+
+def _generate_via_sync(client, model_name, prompt):
+    """Generate an image using the standard synchronous API."""
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config={"response_modalities": ["IMAGE"]},
+    )
+
+    if not response.candidates:
+        logging.error("No candidates in sync response for %s", model_name)
+        return None
+
+    for part in response.candidates[0].content.parts:
+        if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+            return part.inline_data.data
+
+    logging.error("No image data in sync response for %s", model_name)
+    return None
+
+
+def _generate_via_batch(client, model_name, prompt):
+    """Generate an image using the Batch API (50% cheaper, minutes latency)."""
+    batch_job = client.batches.create(
+        model=model_name,
+        src=[{
+            "contents": [{
+                "parts": [{"text": prompt}],
+                "role": "user",
+            }],
+            "config": {
+                "response_modalities": ["IMAGE"],
+            },
+        }],
+        config={"display_name": "front-door-image"},
+    )
+
+    logging.info("Submitted batch job %s using %s", batch_job.name, model_name)
+
+    # Poll until the job finishes
+    completed_states = {
+        "JOB_STATE_SUCCEEDED",
+        "JOB_STATE_FAILED",
+        "JOB_STATE_CANCELLED",
+        "JOB_STATE_EXPIRED",
+        "JOB_STATE_PARTIALLY_SUCCEEDED",
+    }
+
+    while batch_job.state.name not in completed_states:
+        time.sleep(BATCH_POLL_INTERVAL_SECONDS)
+        batch_job = client.batches.get(name=batch_job.name)
+        logging.info("Batch job %s state: %s", batch_job.name, batch_job.state.name)
+
+    if batch_job.state.name != "JOB_STATE_SUCCEEDED":
+        logging.error(
+            "Batch job %s finished with state %s: %s",
+            batch_job.name, batch_job.state.name, batch_job.error,
+        )
+        return None
+
+    return _extract_image_from_batch(batch_job)
 
 
 def _extract_image_from_batch(batch_job):

@@ -342,6 +342,55 @@ class TestOmerCounting:
 
 
 # ---------------------------------------------------------------------------
+# Image staleness detection tests
+# ---------------------------------------------------------------------------
+
+class TestImageStaleness:
+    def test_stale_when_no_previous_state(self):
+        """With no prior image state, image should be considered stale."""
+        import server
+        server._last_image_cal_state = None
+        cal = {"holiday_name": None, "is_shabbat": False, "is_yom_tov": False}
+        assert server._image_is_stale(cal) is True
+
+    def test_not_stale_when_state_matches(self):
+        """When calendar state matches the last image, not stale."""
+        import server
+        server._last_image_cal_state = {"holiday_name": None, "is_shabbat": False, "is_yom_tov": False}
+        cal = {"holiday_name": None, "is_shabbat": False, "is_yom_tov": False, "events": []}
+        assert server._image_is_stale(cal) is False
+
+    def test_stale_when_holiday_changes(self):
+        """Entering a holiday should mark the image as stale."""
+        import server
+        server._last_image_cal_state = {"holiday_name": None, "is_shabbat": False, "is_yom_tov": False}
+        cal = {"holiday_name": "Pesach I", "is_shabbat": False, "is_yom_tov": True, "events": []}
+        assert server._image_is_stale(cal) is True
+
+    def test_stale_when_shabbat_starts(self):
+        """Entering Shabbat should mark the image as stale."""
+        import server
+        server._last_image_cal_state = {"holiday_name": None, "is_shabbat": False, "is_yom_tov": False}
+        cal = {"holiday_name": "Parashat Shmini", "is_shabbat": True, "is_yom_tov": False, "events": []}
+        assert server._image_is_stale(cal) is True
+
+    def test_stale_when_shabbat_ends(self):
+        """Leaving Shabbat should mark the image as stale."""
+        import server
+        server._last_image_cal_state = {"holiday_name": "Parashat Shmini", "is_shabbat": True, "is_yom_tov": False}
+        cal = {"holiday_name": None, "is_shabbat": False, "is_yom_tov": False, "events": []}
+        assert server._image_is_stale(cal) is True
+
+    def test_cal_state_key_ignores_extra_fields(self):
+        """_cal_state_key only extracts the three relevant fields."""
+        import server
+        cal = {"holiday_name": "Pesach", "is_shabbat": True, "is_yom_tov": True,
+               "events": [{"title": "foo"}], "candle_lighting": "7pm", "havdalah": None}
+        key = server._cal_state_key(cal)
+        assert key == {"holiday_name": "Pesach", "is_shabbat": True, "is_yom_tov": True}
+
+
+# ---------------------------------------------------------------------------
 # Prompt builder tests
 # ---------------------------------------------------------------------------
 

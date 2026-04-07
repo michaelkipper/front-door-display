@@ -71,6 +71,10 @@ _last_prefetch_date_key = None
 # Image generation timestamp
 _last_image_gen = 0
 
+# Calendar state when the current image was generated, used for staleness detection.
+# Keys: holiday_name, is_shabbat, is_yom_tov
+_last_image_cal_state = None
+
 # Throttled warning timestamps
 _last_weather_error_log = 0.0
 _last_calendar_error_log = 0.0
@@ -417,9 +421,25 @@ def get_calendar_state(now):
 # Image scheduler
 # ---------------------------------------------------------------------------
 
+def _cal_state_key(cal_state):
+    """Extract the fields used to detect whether the image is stale."""
+    return {
+        "holiday_name": cal_state.get("holiday_name"),
+        "is_shabbat": cal_state.get("is_shabbat", False),
+        "is_yom_tov": cal_state.get("is_yom_tov", False),
+    }
+
+
+def _image_is_stale(cal_state):
+    """True if the current image was generated for a different calendar state."""
+    if _last_image_cal_state is None:
+        return True
+    return _cal_state_key(cal_state) != _last_image_cal_state
+
+
 def _image_generation_loop():
     """Background thread: generate a new image every hour (6am-midnight)."""
-    global _last_image_gen
+    global _last_image_gen, _last_image_cal_state
 
     # Wait a few seconds for app to start
     time.sleep(5)
@@ -430,8 +450,16 @@ def _image_generation_loop():
             if now.hour not in IMAGE_SKIP_HOURS:
                 weather = fetch_weather()
                 cal_state = get_calendar_state(now)
-                generate_image(GEMINI_API_KEY, weather, cal_state, now)
-                _last_image_gen = time.time()
+                stale = _image_is_stale(cal_state)
+                use_batch = not stale
+                if stale:
+                    logging.info(
+                        "Image is stale (state changed) — using sync API for immediate refresh"
+                    )
+                result = generate_image(GEMINI_API_KEY, weather, cal_state, now, use_batch=use_batch)
+                if result:
+                    _last_image_gen = time.time()
+                    _last_image_cal_state = _cal_state_key(cal_state)
             else:
                 logging.info("Skipping image generation (hour=%d)", now.hour)
         except Exception:
@@ -499,14 +527,18 @@ def main(argv):
     # Silence per-request access logs from Flask's dev server to prevent log spam.
     py_logging.getLogger("werkzeug").setLevel(py_logging.ERROR)
 
-    # Generate an initial image on startup if none exists and it's daytime
+    # Generate an initial image on startup if none exists and it's daytime.
+    # Uses the sync API so the kiosk doesn't wait several minutes for a batch job.
+    global _last_image_cal_state
     now = _now()
     if not has_current_image() and now.hour not in IMAGE_SKIP_HOURS and GEMINI_API_KEY:
-        logging.info("No current image — generating on startup")
+        logging.info("No current image — generating on startup (sync)")
         try:
             weather = fetch_weather()
             cal_state = get_calendar_state(now)
-            generate_image(GEMINI_API_KEY, weather, cal_state, now)
+            result = generate_image(GEMINI_API_KEY, weather, cal_state, now, use_batch=False)
+            if result:
+                _last_image_cal_state = _cal_state_key(cal_state)
         except Exception:
             logging.exception("Failed to generate startup image")
 
