@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/water_meter.css" />
   </head>
   <body>
     <!-- Invisible trigger for offset controls -->
@@ -47,6 +48,17 @@
 
     <!-- This element shows the current weather -->
     <div id="weather-info"></div>
+
+    <!-- Water meter reading (lower-right) -->
+    <div id="water-reading">-- m³</div>
+
+    <!-- Water usage graph overlay -->
+    <div id="water-overlay">
+      <div id="water-graph-container">
+        <canvas id="water-graph"></canvas>
+        <button id="water-close">&times;</button>
+      </div>
+    </div>
 
     <script>
       // --- DOM elements ---
@@ -306,5 +318,6 @@
       setInterval(updateClock, 1000);
       setInterval(fetchState, 30000);
     </script>
+    <script src="/static/water_meter.js"></script>
   </body>
 </html>

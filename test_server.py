@@ -6,6 +6,7 @@ calendar event filtering, holiday classification, and prompt building.
 """
 
 import json
+import time
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -516,3 +517,76 @@ class TestFlaskAPI:
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["offset_ms"] == 3600000
+
+
+# ---------------------------------------------------------------------------
+# Water meter tests
+# ---------------------------------------------------------------------------
+
+SAMPLE_METRICS = """\
+# HELP water_meter_reading Reading from the water meter
+# TYPE water_meter_reading_total counter
+water_meter_reading_total{device="esp32-cam"} 19340198
+# HELP water_meter_readings_total Total number of meter reading attempts since boot, by status
+# TYPE water_meter_readings_total counter
+water_meter_readings_total{device="esp32-cam",status="valid"} 127
+"""
+
+
+class TestWaterMeter:
+    @pytest.fixture(autouse=True)
+    def reset_water_state(self):
+        import water_meter
+        water_meter._reading_history.clear()
+        water_meter._last_reading["cubic_metres"] = None
+        water_meter._last_reading["timestamp"] = 0
+        yield
+
+    def test_parse_reading_extracts_total(self):
+        from water_meter import _parse_reading
+        assert _parse_reading(SAMPLE_METRICS) == 19340198
+
+    def test_parse_reading_returns_none_on_missing(self):
+        from water_meter import _parse_reading
+        assert _parse_reading("# just comments\n") is None
+
+    def test_fetch_stores_cubic_metres(self):
+        import water_meter
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.text = SAMPLE_METRICS
+        with patch("water_meter.requests.get", return_value=mock_resp):
+            result = water_meter.fetch_reading()
+        assert result == pytest.approx(1934.0198, rel=1e-6)
+        assert water_meter.get_current_reading() == pytest.approx(1934.0198, rel=1e-6)
+
+    def test_fetch_appends_to_history(self):
+        import water_meter
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.text = SAMPLE_METRICS
+        with patch("water_meter.requests.get", return_value=mock_resp):
+            water_meter.fetch_reading()
+        history = water_meter.get_history()
+        assert len(history) == 1
+        assert history[0]["value"] == pytest.approx(1934.0198, rel=1e-6)
+
+    def test_fetch_failure_returns_last_known(self):
+        import water_meter
+        water_meter._last_reading["cubic_metres"] = 1234.5
+        with patch("water_meter.requests.get", side_effect=Exception("timeout")):
+            result = water_meter.fetch_reading()
+        assert result == 1234.5
+
+    def test_history_trims_old_entries(self):
+        import water_meter
+        now = time.time()
+        # Add an old entry and a recent one
+        water_meter._reading_history.append((now - 3600, 100.0))
+        water_meter._reading_history.append((now - 60, 101.0))
+        history = water_meter.get_history()
+        assert len(history) == 1
+        assert history[0]["value"] == 101.0
+

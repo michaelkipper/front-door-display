@@ -19,6 +19,7 @@ import time
 from flask import Flask, jsonify, request, send_from_directory
 
 from image_gen import CURRENT_IMAGE, generate_image, has_current_image
+from water_meter import fetch_reading as fetch_water_reading, get_current_reading as get_water_reading, get_history as get_water_history
 
 _PORT = flags.DEFINE_integer("port", 8080, "Port to listen on")
 
@@ -468,6 +469,19 @@ def _image_generation_loop():
         time.sleep(IMAGE_INTERVAL_SECONDS)
 
 
+WATER_METER_POLL_SECONDS = 5
+
+def _water_meter_loop():
+    """Background thread: poll the water meter every few seconds."""
+    time.sleep(2)
+    while True:
+        try:
+            fetch_water_reading()
+        except Exception:
+            logging.exception("Error in water meter loop")
+        time.sleep(WATER_METER_POLL_SECONDS)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -518,6 +532,21 @@ def serve_image(filename):
 
 
 # ---------------------------------------------------------------------------
+# Water meter routes
+# ---------------------------------------------------------------------------
+
+@flaskapp.route("/api/water")
+def api_water():
+    reading = get_water_reading()
+    return jsonify({"cubic_metres": reading})
+
+
+@flaskapp.route("/api/water/history")
+def api_water_history():
+    return jsonify(get_water_history())
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -545,6 +574,10 @@ def main(argv):
     # Start background image generation thread
     gen_thread = threading.Thread(target=_image_generation_loop, daemon=True)
     gen_thread.start()
+
+    # Start background water meter polling thread
+    water_thread = threading.Thread(target=_water_meter_loop, daemon=True)
+    water_thread.start()
 
     flaskapp.run(host="0.0.0.0", port=_PORT.value, debug=False)
 
