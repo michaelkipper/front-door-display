@@ -140,11 +140,25 @@ def _play_on_device(cast, audio_url):
 
 
 def _connect_by_cast_info(cast_info):
-    """Connect to a Chromecast using a discovered CastInfo."""
+    """Connect to a Chromecast using a discovered CastInfo.
+
+    Replaces MDNSServiceInfo services with a HostServiceInfo so the socket
+    client connects directly by IP instead of trying mDNS resolution.
+    """
     logging.info("Connecting to Chromecast '%s' at %s:%s...",
                  cast_info.friendly_name, cast_info.host, cast_info.port)
-    zconf = pychromecast.zeroconf.Zeroconf()
-    return pychromecast.Chromecast(cast_info, zconf=zconf)
+    host_service = pychromecast.HostServiceInfo(host=cast_info.host, port=cast_info.port)
+    direct_info = pychromecast.CastInfo(
+        services={host_service},
+        uuid=cast_info.uuid,
+        model_name=cast_info.model_name,
+        friendly_name=cast_info.friendly_name,
+        host=cast_info.host,
+        port=cast_info.port,
+        cast_type=cast_info.cast_type,
+        manufacturer=cast_info.manufacturer,
+    )
+    return pychromecast.Chromecast(direct_info)
 
 
 def _connect_by_host(host, port=8009):
