@@ -1,8 +1,9 @@
 """
-Image generation using Gemini 2.5 Flash.
+Image generation using Gemini 2.5 Flash via the Batch API.
 
 Generates context-aware background images based on weather, holiday,
-time of day, and season. Images are saved to the images/ directory.
+time of day, and season. Uses the Batch API for 50% cost savings.
+Images are saved to the images/ directory.
 """
 
 from absl import logging
@@ -21,8 +22,10 @@ HISTORY_DIR = os.path.join(IMAGES_DIR, "history")
 MODEL_CANDIDATES = [
     "gemini-2.5-flash-image",
     "gemini-2.5-flash-image-preview",
-    "gemini-2.0-flash-preview-image-generation",
 ]
+
+# How often to poll for batch job completion.
+BATCH_POLL_INTERVAL_SECONDS = 5
 
 # WMO weather code descriptions for prompt building
 WMO_DESCRIPTIONS = {
@@ -93,7 +96,7 @@ def _get_holiday_context(holiday_name, events):
     all_text = " ".join(e.get("title", "").lower() for e in events)
 
     if "pesach" in all_text or "passover" in all_text:
-        return "matzah bread on a Passover seder plate, spring flowers"
+        return "matzah on a Passover seder plate, spring flowers"
     if "shavuot" in all_text:
         return "rolling green hills with wildflowers, a Torah scroll, dairy foods like cheesecake"
     if "sukkot" in all_text:
@@ -172,7 +175,10 @@ def build_image_prompt(weather, calendar_state, now):
 
 def generate_image(api_key, weather, calendar_state, now):
     """
-    Generate an image using Gemini 2.5 Flash and save it.
+    Generate an image using the Gemini Batch API (50% cheaper) and save it.
+
+    Submits an inline batch job, polls until complete, then extracts and
+    saves the image. Blocking — call from a background thread.
 
     Args:
         api_key: Gemini API key string
@@ -192,59 +198,98 @@ def generate_image(api_key, weather, calendar_state, now):
     try:
         client = genai.Client(api_key=api_key)
 
-        response = None
+        batch_job = None
         used_model = None
         for model_name in MODEL_CANDIDATES:
             try:
-                response = client.models.generate_content(
+                batch_job = client.batches.create(
                     model=model_name,
-                    contents=prompt,
-                    config=genai.types.GenerateContentConfig(
-                        response_modalities=["IMAGE"],
-                    ),
+                    src=[{
+                        "contents": [{
+                            "parts": [{"text": prompt}],
+                            "role": "user",
+                        }],
+                        "config": {
+                            "response_modalities": ["IMAGE"],
+                        },
+                    }],
+                    config={"display_name": "front-door-image"},
                 )
                 used_model = model_name
                 break
             except genai_errors.ClientError as exc:
-                # Model not found / unsupported: try next candidate.
                 if exc.status_code == 404:
                     logging.warning("Gemini model unavailable: %s", model_name)
                     continue
                 raise
 
-        if response is None:
+        if batch_job is None:
             logging.error(
                 "No supported Gemini image model found. Tried: %s",
                 ", ".join(MODEL_CANDIDATES),
             )
             return None
 
-        # Extract image data from response
-        if not response.candidates:
-            logging.error("No candidates in Gemini response")
+        logging.info("Submitted batch job %s using %s", batch_job.name, used_model)
+
+        # Poll until the job finishes
+        completed_states = {
+            "JOB_STATE_SUCCEEDED",
+            "JOB_STATE_FAILED",
+            "JOB_STATE_CANCELLED",
+            "JOB_STATE_EXPIRED",
+            "JOB_STATE_PARTIALLY_SUCCEEDED",
+        }
+
+        while batch_job.state.name not in completed_states:
+            time.sleep(BATCH_POLL_INTERVAL_SECONDS)
+            batch_job = client.batches.get(name=batch_job.name)
+            logging.info("Batch job %s state: %s", batch_job.name, batch_job.state.name)
+
+        if batch_job.state.name != "JOB_STATE_SUCCEEDED":
+            logging.error(
+                "Batch job %s finished with state %s: %s",
+                batch_job.name, batch_job.state.name, batch_job.error,
+            )
             return None
 
-        for part in response.candidates[0].content.parts:
-            if part.inline_data and part.inline_data.mime_type.startswith("image/"):
-                image_data = part.inline_data.data
-                break
-        else:
-            logging.error("No image data found in Gemini response")
+        # Extract image data from inline response
+        image_data = _extract_image_from_batch(batch_job)
+        if image_data is None:
             return None
 
-        # Archive current image before overwriting
         _archive_current_image()
 
         os.makedirs(IMAGES_DIR, exist_ok=True)
         with open(CURRENT_IMAGE, "wb") as f:
             f.write(image_data)
 
-        logging.info("Generated and saved new image to %s using %s", CURRENT_IMAGE, used_model)
+        logging.info("Generated and saved new image to %s using %s (batch)", CURRENT_IMAGE, used_model)
         return CURRENT_IMAGE
 
     except Exception:
-        logging.exception("Failed to generate image via Gemini")
+        logging.exception("Failed to generate image via Gemini batch")
         return None
+
+
+def _extract_image_from_batch(batch_job):
+    """Extract image bytes from a completed batch job's inline responses."""
+    if not batch_job.dest or not batch_job.dest.inlined_responses:
+        logging.error("No inline responses in batch job %s", batch_job.name)
+        return None
+
+    for inlined in batch_job.dest.inlined_responses:
+        if inlined.error:
+            logging.error("Batch response error: %s", inlined.error)
+            continue
+        if not inlined.response or not inlined.response.candidates:
+            continue
+        for part in inlined.response.candidates[0].content.parts:
+            if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                return part.inline_data.data
+
+    logging.error("No image data found in batch job %s responses", batch_job.name)
+    return None
 
 
 def _archive_current_image():
