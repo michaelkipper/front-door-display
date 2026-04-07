@@ -143,7 +143,8 @@ def _connect_by_cast_info(cast_info):
     """Connect to a Chromecast using a discovered CastInfo."""
     logging.info("Connecting to Chromecast '%s' at %s:%s...",
                  cast_info.friendly_name, cast_info.host, cast_info.port)
-    return pychromecast.Chromecast(cast_info)
+    zconf = pychromecast.zeroconf.Zeroconf()
+    return pychromecast.Chromecast(cast_info, zconf=zconf)
 
 
 def _connect_by_host(host, port=8009):
