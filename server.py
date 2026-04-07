@@ -18,7 +18,7 @@ import time
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from announcements import send_test as send_test_announcement, start_announcement_loop
+from announcements import discover_devices as discover_chromecast_devices, send_test as send_test_announcement, start_announcement_loop
 from image_gen import CURRENT_IMAGE, generate_image, has_current_image
 from stocks import fetch_quotes as fetch_stock_quotes
 from water_meter import fetch_reading as fetch_water_reading, get_current_reading as get_water_reading, get_history as get_water_history
@@ -567,11 +567,23 @@ def api_offset():
 @flaskapp.route("/api/test-announcement", methods=["POST"])
 def api_test_announcement():
     try:
-        ok = send_test_announcement(_PORT.value)
+        data = request.get_json(silent=True) or {}
+        host = data.get("host")  # optional: cast to a specific IP
+        ok = send_test_announcement(_PORT.value, host=host)
         return jsonify({"ok": ok})
     except Exception as exc:
         logging.exception("Test announcement failed")
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@flaskapp.route("/api/chromecast-devices")
+def api_chromecast_devices():
+    try:
+        devices = discover_chromecast_devices()
+        return jsonify({"devices": devices})
+    except Exception as exc:
+        logging.exception("Chromecast discovery failed")
+        return jsonify({"devices": [], "error": str(exc)}), 500
 
 
 @flaskapp.route("/images/<path:filename>")

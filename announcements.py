@@ -49,8 +49,61 @@ def _generate_tts(text):
     logging.info("Generated TTS audio: %s", ANNOUNCEMENT_FILE)
 
 
+def discover_devices(timeout=5):
+    """Scan the network for all Chromecast devices and return info about each."""
+    logging.info("Scanning for all Chromecast devices (timeout=%ds)...", timeout)
+    chromecasts, browser = pychromecast.get_chromecasts(timeout=timeout)
+    devices = []
+    try:
+        for cc in chromecasts:
+            info = {
+                "name": cc.name,
+                "model": cc.model_name,
+                "host": cc.host,
+                "port": cc.port,
+                "uuid": str(cc.uuid),
+                "cast_type": cc.cast_type,
+            }
+            devices.append(info)
+            logging.info(
+                "  Device: name='%s', model='%s', host=%s:%s, uuid=%s, type=%s",
+                info["name"], info["model"], info["host"], info["port"],
+                info["uuid"], info["cast_type"],
+            )
+        logging.info("Found %d device(s) on network", len(devices))
+    finally:
+        browser.stop_discovery()
+    return devices
+
+
+def _play_on_device(cast, audio_url):
+    """Play audio on an already-discovered Chromecast device."""
+    logging.info(
+        "Casting to device: name='%s', model='%s', host=%s:%s, uuid=%s",
+        cast.name, cast.model_name, cast.host, cast.port, cast.uuid,
+    )
+    cast.wait()
+    logging.info(
+        "Device status: app_id=%s, display_name='%s', volume=%.2f, muted=%s",
+        cast.status.app_id if cast.status else None,
+        cast.status.display_name if cast.status else None,
+        cast.status.volume_level if cast.status else -1,
+        cast.status.volume_muted if cast.status else None,
+    )
+    mc = cast.media_controller
+    logging.info("Playing media: %s", audio_url)
+    mc.play_media(audio_url, "audio/mp3")
+    mc.block_until_active()
+    logging.info(
+        "Media status: player_state=%s, content_id=%s",
+        mc.status.player_state if mc.status else None,
+        mc.status.content_id if mc.status else None,
+    )
+
+
 def _cast_to_speakers(audio_url):
     """Cast an audio URL to the All Speakers group."""
+    logging.info("Discovering Chromecast devices matching '%s'...", SPEAKER_GROUP_NAME)
     chromecasts, browser = pychromecast.get_listed_chromecasts(
         friendly_names=[SPEAKER_GROUP_NAME]
     )
@@ -59,12 +112,26 @@ def _cast_to_speakers(audio_url):
             logging.error("Speaker group '%s' not found on network", SPEAKER_GROUP_NAME)
             return False
 
-        cast = chromecasts[0]
-        cast.wait()
-        mc = cast.media_controller
-        mc.play_media(audio_url, "audio/mp3")
-        mc.block_until_active()
+        _play_on_device(chromecasts[0], audio_url)
         logging.info("Announcement cast to '%s'", SPEAKER_GROUP_NAME)
+        return True
+    finally:
+        browser.stop_discovery()
+
+
+def _cast_to_host(host, audio_url):
+    """Cast an audio URL to a specific Chromecast by IP address."""
+    logging.info("Connecting to Chromecast at %s...", host)
+    chromecasts, browser = pychromecast.get_listed_chromecasts(
+        friendly_names=None, known_hosts=[host]
+    )
+    try:
+        if not chromecasts:
+            logging.error("No Chromecast found at %s", host)
+            return False
+
+        _play_on_device(chromecasts[0], audio_url)
+        logging.info("Announcement cast to %s", host)
         return True
     finally:
         browser.stop_discovery()
@@ -121,9 +188,17 @@ def _announcement_loop(get_now_fn, get_events_fn, server_port):
         time.sleep(CHECK_INTERVAL_SECONDS)
 
 
-def send_test(server_port, text="This is a test announcement from the front door display."):
-    """Send a one-off test announcement to the speakers."""
-    return _broadcast(text, server_port)
+def send_test(server_port, text="This is a test announcement from the front door display.", host=None):
+    """Send a one-off test announcement.
+
+    If *host* is given, cast directly to that IP instead of the speaker group.
+    """
+    _generate_tts(text)
+    local_ip = _get_local_ip()
+    audio_url = f"http://{local_ip}:{server_port}/static/announcement.mp3"
+    if host:
+        return _cast_to_host(host, audio_url)
+    return _cast_to_speakers(audio_url)
 
 
 def start_announcement_loop(get_now_fn, get_events_fn, server_port):
