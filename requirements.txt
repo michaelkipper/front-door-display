@@ -2,4 +2,6 @@ absl-py>=1.0
 flask>=3.0
 requests>=2.31
 google-genai>=1.0
+gTTS>=2.5
+PyChromecast>=14.0
 yfinance>=0.2.30

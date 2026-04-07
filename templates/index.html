@@ -28,10 +28,12 @@
       <button data-offset-ms="21600000">+6h</button>
       <button data-offset-ms="86400000">+1d</button>
       <span class="controls-sep">|</span>
-      <button data-hourglass="15">⏳15m</button>
-      <button data-hourglass="5">⏳5m</button>
-      <button data-hourglass="1">⏳1m</button>
-      <button data-hourglass="stop">⏳off</button>
+      <button data-hourglass="15">15m</button>
+      <button data-hourglass="5">5m</button>
+      <button data-hourglass="1">1m</button>
+      <button data-hourglass="stop">off</button>
+      <span class="controls-sep">|</span>
+      <button data-action="test-announce">Announce</button>
       <button data-action="close">&times;</button>
     </div>
 
@@ -346,6 +348,20 @@
             window.hourglassDebug = true;
             window.hourglassUpdate(epoch);
           }
+          return;
+        }
+
+        if (button.dataset.action === "test-announce") {
+          button.disabled = true;
+          button.textContent = "🔊 ...";
+          try {
+            const r = await fetch("/api/test-announcement", { method: "POST" });
+            const j = await r.json();
+            button.textContent = j.ok ? "🔊 ✓" : "🔊 ✗";
+          } catch (e) {
+            button.textContent = "🔊 ✗";
+          }
+          setTimeout(() => { button.textContent = "🔊 Test"; button.disabled = false; }, 3000);
           return;
         }
 

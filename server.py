@@ -18,6 +18,7 @@ import time
 
 from flask import Flask, jsonify, request, send_from_directory
 
+from announcements import send_test as send_test_announcement, start_announcement_loop
 from image_gen import CURRENT_IMAGE, generate_image, has_current_image
 from stocks import fetch_quotes as fetch_stock_quotes
 from water_meter import fetch_reading as fetch_water_reading, get_current_reading as get_water_reading, get_history as get_water_history
@@ -563,6 +564,16 @@ def api_offset():
     return jsonify({"offset_ms": _time_offset_ms})
 
 
+@flaskapp.route("/api/test-announcement", methods=["POST"])
+def api_test_announcement():
+    try:
+        ok = send_test_announcement(_PORT.value)
+        return jsonify({"ok": ok})
+    except Exception as exc:
+        logging.exception("Test announcement failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @flaskapp.route("/images/<path:filename>")
 def serve_image(filename):
     return send_from_directory("images", filename)
@@ -615,6 +626,9 @@ def main(argv):
     # Start background water meter polling thread
     water_thread = threading.Thread(target=_water_meter_loop, daemon=True)
     water_thread.start()
+
+    # Start Shabbat announcement loop
+    start_announcement_loop(_now, _get_events_for_date, _PORT.value)
 
     flaskapp.run(host="0.0.0.0", port=_PORT.value, debug=False)
 
