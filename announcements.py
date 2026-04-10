@@ -4,13 +4,18 @@ Broadcasts a voice reminder to Google Home speakers 5 minutes before
 candle lighting or havdalah using pychromecast and gTTS.
 """
 
+from __future__ import annotations
+
 import os
 import socket
 import threading
 import time
+import collections.abc
+import datetime
+import typing
 
 from absl import logging
-from gtts import gTTS
+import gtts
 import pychromecast
 
 REMINDER_MINUTES = 5
@@ -26,7 +31,7 @@ _announced_events = set()
 _discovery_cache = {"devices": None, "cast_infos": {}, "timestamp": 0}
 
 
-def _get_local_ip():
+def _get_local_ip() -> str:
     """Get the local IP address of this machine."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -38,7 +43,7 @@ def _get_local_ip():
         return "127.0.0.1"
 
 
-def _format_time_for_speech(dt):
+def _format_time_for_speech(dt: datetime.datetime) -> str:
     """Format a datetime for spoken English, e.g. '7:34 PM'."""
     hour = dt.hour % 12 or 12
     minute = f"{dt.minute:02d}"
@@ -46,9 +51,9 @@ def _format_time_for_speech(dt):
     return f"{hour}:{minute} {ampm}"
 
 
-def _generate_tts(text):
+def _generate_tts(text: str) -> None:
     """Generate announcement audio and save to static file."""
-    tts = gTTS(text=text, lang="en")
+    tts = gtts.gTTS(text=text, lang="en")
     tts.save(ANNOUNCEMENT_FILE)
     logging.info("Generated TTS audio: %s", ANNOUNCEMENT_FILE)
 
@@ -101,7 +106,7 @@ def discover_devices(timeout: int = 10) -> list[dict]:
     return devices
 
 
-def _resolve_speaker_cast_info():
+def _resolve_speaker_cast_info() -> typing.Any:
     """Look up the CastInfo for SPEAKER_NAME via cached discovery."""
     discover_devices()
     cast_info = _discovery_cache["cast_infos"].get(SPEAKER_NAME)
@@ -113,7 +118,7 @@ def _resolve_speaker_cast_info():
     return cast_info
 
 
-def _play_on_device(cast, audio_url):
+def _play_on_device(cast: typing.Any, audio_url: str) -> None:
     """Play audio on an already-discovered Chromecast device."""
     logging.info(
         "Casting to device: name='%s', model='%s', host=%s:%s, uuid=%s",
@@ -139,7 +144,7 @@ def _play_on_device(cast, audio_url):
     )
 
 
-def _connect_by_cast_info(cast_info):
+def _connect_by_cast_info(cast_info: typing.Any) -> typing.Any:
     """Connect to a Chromecast using a discovered CastInfo.
 
     Replaces MDNSServiceInfo services with a HostServiceInfo so the socket
@@ -161,7 +166,7 @@ def _connect_by_cast_info(cast_info):
     return pychromecast.Chromecast(direct_info)
 
 
-def _connect_by_host(host, port=8009):
+def _connect_by_host(host: str, port: int = 8009) -> typing.Any:
     """Connect to a Chromecast directly by IP (fallback for /api/test-announcement?host=)."""
     logging.info("Connecting directly to Chromecast at %s:%s...", host, port)
     from uuid import UUID
@@ -179,7 +184,7 @@ def _connect_by_host(host, port=8009):
     return pychromecast.Chromecast(cast_info)
 
 
-def _cast_to_speakers(audio_url):
+def _cast_to_speakers(audio_url: str) -> bool:
     """Cast an audio URL to the default speaker, resolved by name."""
     cast_info = _resolve_speaker_cast_info()
     if not cast_info:
@@ -196,7 +201,7 @@ def _cast_to_speakers(audio_url):
         cast.disconnect()
 
 
-def _cast_to_host(host, audio_url):
+def _cast_to_host(host: str, audio_url: str) -> bool:
     """Cast an audio URL to a specific Chromecast by IP address."""
     cast = _connect_by_host(host)
     try:
@@ -210,7 +215,7 @@ def _cast_to_host(host, audio_url):
         cast.disconnect()
 
 
-def _broadcast(text, server_port):
+def _broadcast(text: str, server_port: int) -> bool:
     """Generate TTS audio and cast it to the speaker group."""
     _generate_tts(text)
     local_ip = _get_local_ip()
@@ -218,7 +223,11 @@ def _broadcast(text, server_port):
     return _cast_to_speakers(audio_url)
 
 
-def _check_and_announce(get_now_fn, get_events_fn, server_port):
+def _check_and_announce(
+    get_now_fn: collections.abc.Callable[[], datetime.datetime],
+    get_events_fn: collections.abc.Callable[[datetime.datetime, datetime.datetime], list[dict[str, typing.Any]]],
+    server_port: int,
+) -> None:
     """Check whether an event is ~5 min away and broadcast if so."""
     now = get_now_fn()
     events = get_events_fn(now, now)
@@ -240,7 +249,11 @@ def _check_and_announce(get_now_fn, get_events_fn, server_port):
         if 0 < delta_seconds <= window and event_key not in _announced_events:
             label = "Candle Lighting" if event["is_candle_lighting"] else "Havdalah"
             time_str = _format_time_for_speech(event_time)
-            text = f"{label} is in {REMINDER_MINUTES} minutes, at {time_str}."
+            text = (f"Attention Kipper Family! Attention Kipper Family! " +
+                   f"{label} is in {REMINDER_MINUTES} minutes, at {time_str}. " +
+                   f"Please prepare accordingly. " +
+                   f"This is an automated announcement from the front door display. " +
+                   f"Again, {label} is at {time_str}.")
             logging.info("Broadcasting: %s", text)
             if _broadcast(text, server_port):
                 _announced_events.add(event_key)
@@ -250,7 +263,11 @@ def _check_and_announce(get_now_fn, get_events_fn, server_port):
         _announced_events.clear()
 
 
-def _announcement_loop(get_now_fn, get_events_fn, server_port):
+def _announcement_loop(
+    get_now_fn: collections.abc.Callable[[], datetime.datetime],
+    get_events_fn: collections.abc.Callable[[datetime.datetime, datetime.datetime], list[dict[str, typing.Any]]],
+    server_port: int,
+) -> None:
     """Background loop: periodically check for upcoming events."""
     time.sleep(10)
     while True:
@@ -261,7 +278,7 @@ def _announcement_loop(get_now_fn, get_events_fn, server_port):
         time.sleep(CHECK_INTERVAL_SECONDS)
 
 
-def send_test(server_port, text="This is a test announcement from the front door display.", host=None):
+def send_test(server_port: int, text: str = "This is a test announcement from the front door display.", host: str | None = None) -> bool:
     """Send a one-off test announcement.
 
     If *host* is given, cast directly to that IP instead of the speaker group.
@@ -274,7 +291,11 @@ def send_test(server_port, text="This is a test announcement from the front door
     return _cast_to_speakers(audio_url)
 
 
-def start_announcement_loop(get_now_fn, get_events_fn, server_port):
+def start_announcement_loop(
+    get_now_fn: collections.abc.Callable[[], datetime.datetime],
+    get_events_fn: collections.abc.Callable[[datetime.datetime, datetime.datetime], list[dict[str, typing.Any]]],
+    server_port: int,
+) -> None:
     """Launch the announcement background thread."""
     thread = threading.Thread(
         target=_announcement_loop,

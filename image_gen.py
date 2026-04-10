@@ -8,12 +8,17 @@ when an image is needed immediately (e.g. cold start or stale state).
 Images are saved to the images/ directory.
 """
 
+from __future__ import annotations
+
+import datetime
+import typing
+
 from absl import logging
 import os
 import time
 
-from google import genai
-from google.genai import errors as genai_errors
+import google.genai
+import google.genai.errors
 
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
 CURRENT_IMAGE = os.path.join(IMAGES_DIR, "current.png")
@@ -62,7 +67,7 @@ WMO_DESCRIPTIONS = {
 }
 
 
-def _get_season(month, temp):
+def _get_season(month: int, temp: float) -> str:
     """Infer season from month and temperature."""
     if month in (12, 1, 2) or temp < 0:
         return "Winter"
@@ -74,7 +79,7 @@ def _get_season(month, temp):
         return "Autumn"
 
 
-def _get_time_of_day(hour):
+def _get_time_of_day(hour: int) -> str:
     """Get time-of-day description for prompt."""
     if 6 <= hour < 9:
         return "early morning with soft dawn light"
@@ -90,7 +95,7 @@ def _get_time_of_day(hour):
         return "evening with cool blue tones and warm interior lighting"
 
 
-def _get_holiday_context(holiday_name, events):
+def _get_holiday_context(holiday_name: str | None, events: list[dict[str, typing.Any]]) -> str | None:
     """Get holiday-specific imagery description from event titles."""
     if not events:
         return None
@@ -119,7 +124,7 @@ def _get_holiday_context(holiday_name, events):
     return None
 
 
-def build_image_prompt(weather, calendar_state, now):
+def build_image_prompt(weather: dict[str, typing.Any] | None, calendar_state: dict[str, typing.Any], now: datetime.datetime) -> str:
     """
     Build a context-aware image prompt from current weather, calendar, and time.
 
@@ -175,7 +180,7 @@ def build_image_prompt(weather, calendar_state, now):
     return prompt
 
 
-def generate_image(api_key, weather, calendar_state, now, use_batch=True):
+def generate_image(api_key: str, weather: dict[str, typing.Any] | None, calendar_state: dict[str, typing.Any], now: datetime.datetime, use_batch: bool = True) -> str | None:
     """
     Generate an image using Gemini and save it.
 
@@ -201,7 +206,7 @@ def generate_image(api_key, weather, calendar_state, now, use_batch=True):
     mode = "batch" if use_batch else "sync"
 
     try:
-        client = genai.Client(api_key=api_key)
+        client = google.genai.Client(api_key=api_key)
 
         image_data = None
         used_model = None
@@ -214,7 +219,7 @@ def generate_image(api_key, weather, calendar_state, now, use_batch=True):
                     image_data = _generate_via_sync(client, model_name, prompt)
                 used_model = model_name
                 break
-            except genai_errors.ClientError as exc:
+            except google.genai.errors.ClientError as exc:
                 if exc.status_code == 404:
                     logging.warning("Gemini model unavailable: %s", model_name)
                     continue
@@ -244,7 +249,7 @@ def generate_image(api_key, weather, calendar_state, now, use_batch=True):
         return None
 
 
-def _generate_via_sync(client, model_name, prompt):
+def _generate_via_sync(client: typing.Any, model_name: str, prompt: str) -> bytes | None:
     """Generate an image using the standard synchronous API."""
     response = client.models.generate_content(
         model=model_name,
@@ -264,7 +269,7 @@ def _generate_via_sync(client, model_name, prompt):
     return None
 
 
-def _generate_via_batch(client, model_name, prompt):
+def _generate_via_batch(client: typing.Any, model_name: str, prompt: str) -> bytes | None:
     """Generate an image using the Batch API (50% cheaper, minutes latency)."""
     batch_job = client.batches.create(
         model=model_name,
@@ -306,7 +311,7 @@ def _generate_via_batch(client, model_name, prompt):
     return _extract_image_from_batch(batch_job)
 
 
-def _extract_image_from_batch(batch_job):
+def _extract_image_from_batch(batch_job: typing.Any) -> bytes | None:
     """Extract image bytes from a completed batch job's inline responses."""
     if not batch_job.dest or not batch_job.dest.inlined_responses:
         logging.error("No inline responses in batch job %s", batch_job.name)
@@ -326,7 +331,7 @@ def _extract_image_from_batch(batch_job):
     return None
 
 
-def _archive_current_image():
+def _archive_current_image() -> None:
     """Move current.png to history/ with a timestamp, keeping the last 24."""
     if not os.path.exists(CURRENT_IMAGE):
         return
@@ -352,6 +357,6 @@ def _archive_current_image():
         logging.warning("Failed to clean up image history")
 
 
-def has_current_image():
+def has_current_image() -> bool:
     """Check if a current generated image exists."""
     return os.path.exists(CURRENT_IMAGE)

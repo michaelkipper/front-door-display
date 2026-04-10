@@ -1,6 +1,10 @@
 """Tests for the announcements module."""
 
+from __future__ import annotations
+
+from collections.abc import Generator
 from datetime import datetime
+from typing import Any
 from unittest.mock import MagicMock, patch, call
 
 import pytest
@@ -13,7 +17,7 @@ import announcements
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def reset_announced():
+def reset_announced() -> Generator[None, None, None]:
     """Clear the announced-events set and discovery cache before each test."""
     announcements._announced_events.clear()
     announcements._discovery_cache["devices"] = None
@@ -26,7 +30,7 @@ def reset_announced():
     announcements._discovery_cache["timestamp"] = 0
 
 
-def _make_event(category, date_str, parsed_date):
+def _make_event(category: str, date_str: str, parsed_date: datetime) -> dict[str, Any]:
     """Build a minimal event dict matching the shape from server.py."""
     return {
         "title": f"Test {category}",
@@ -43,7 +47,7 @@ def _make_event(category, date_str, parsed_date):
     }
 
 
-def _mock_cast():
+def _mock_cast() -> MagicMock:
     """Build a mock Chromecast object matching pychromecast 14.x API."""
     cast = MagicMock()
     cast.name = "Kitchen display"
@@ -233,7 +237,7 @@ class TestSendTest:
 # ---------------------------------------------------------------------------
 
 class TestCheckAndAnnounce:
-    def _run(self, now, events, broadcast_return=True):
+    def _run(self, now: datetime, events: list[dict[str, Any]], broadcast_return: bool = True) -> MagicMock:
         """Helper: run _check_and_announce with mocked deps."""
         get_now = lambda: now
         get_events = lambda n, d: events
@@ -316,12 +320,12 @@ class TestCheckAndAnnounce:
 # ---------------------------------------------------------------------------
 
 class TestDiscoverDevices:
-    def _mock_browser(self, devices_dict):
+    def _mock_browser(self, devices_dict: dict[str, Any]) -> MagicMock:
         mock_browser = MagicMock()
         mock_browser.devices = devices_dict
         return mock_browser
 
-    def _mock_service(self, name="Kitchen display", host="192.168.2.24", model="Google Nest Hub Max", cast_type="cast"):
+    def _mock_service(self, name: str = "Kitchen display", host: str = "192.168.2.24", model: str = "Google Nest Hub Max", cast_type: str = "cast") -> MagicMock:
         svc = MagicMock()
         svc.friendly_name = name
         svc.model_name = model

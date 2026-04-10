@@ -4,7 +4,7 @@ Water meter module — fetches readings from an ESP32-CAM Prometheus endpoint.
 Stores a rolling 30-minute history of readings in memory and exposes
 helper functions consumed by the main server routes.
 """
-
+from __future__ import annotations
 from absl import logging
 import re
 import time
@@ -26,7 +26,7 @@ _last_reading = {"cubic_metres": None, "timestamp": 0}
 _last_error_log = 0.0
 
 
-def _parse_reading(text):
+def _parse_reading(text: str) -> int | None:
     """Extract water_meter_reading_total from Prometheus metrics text."""
     match = re.search(r'^water_meter_reading_total\{[^}]*\}\s+(\d+)', text, re.MULTILINE)
     if match:
@@ -34,7 +34,7 @@ def _parse_reading(text):
     return None
 
 
-def fetch_reading():
+def fetch_reading() -> float | None:
     """
     Fetch the current water meter reading from the ESP32-CAM.
 
@@ -68,19 +68,19 @@ def fetch_reading():
         return _last_reading["cubic_metres"]
 
 
-def _trim_history():
+def _trim_history() -> None:
     """Remove readings older than HISTORY_SECONDS."""
     cutoff = time.time() - HISTORY_SECONDS
     while _reading_history and _reading_history[0][0] < cutoff:
         _reading_history.pop(0)
 
 
-def get_current_reading():
+def get_current_reading() -> float | None:
     """Return the latest reading in cubic metres, or None."""
     return _last_reading["cubic_metres"]
 
 
-def get_history():
+def get_history() -> list[dict[str, float]]:
     """
     Return the 30-minute reading history.
 

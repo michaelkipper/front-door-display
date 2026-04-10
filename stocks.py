@@ -4,7 +4,9 @@ Stock ticker module — fetches latest quotes for configured symbols.
 Uses yfinance to retrieve current price and daily change percentage.
 Results are cached to avoid excessive API calls.
 """
+from __future__ import annotations
 
+import typing
 from absl import logging
 import time
 
@@ -21,7 +23,7 @@ _cache = {"data": None, "timestamp": 0}
 _last_error_log = 0.0
 
 
-def fetch_quotes():
+def fetch_quotes() -> list[dict[str, typing.Any]] | None:
     """
     Fetch latest quotes for configured symbols.
 

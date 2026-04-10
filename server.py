@@ -5,23 +5,28 @@ Serves the kiosk UI and provides /api/state with weather, calendar,
 and background image data. Generates new images hourly via Gemini.
 """
 
+from __future__ import annotations
+
+import typing
+
 from absl import app
 from absl import flags
 from absl import logging
-from collections import defaultdict
-from datetime import datetime, timedelta
+import collections
+import datetime
+import google.cloud.logging
 import logging as py_logging
 import os
 import requests
 import threading
 import time
 
-from flask import Flask, jsonify, request, send_from_directory
+import flask
 
-from announcements import discover_devices as discover_chromecast_devices, send_test as send_test_announcement, start_announcement_loop
-from image_gen import CURRENT_IMAGE, generate_image, has_current_image
-from stocks import fetch_quotes as fetch_stock_quotes
-from water_meter import fetch_reading as fetch_water_reading, get_current_reading as get_water_reading, get_history as get_water_history
+import announcements
+import image_gen
+import stocks
+import water_meter
 
 _PORT = flags.DEFINE_integer("port", 8080, "Port to listen on")
 
@@ -30,7 +35,8 @@ _PORT = flags.DEFINE_integer("port", 8080, "Port to listen on")
 # ---------------------------------------------------------------------------
 
 try:
-    from config import GEMINI_API_KEY
+    import config
+    GEMINI_API_KEY = config.GEMINI_API_KEY
 except ImportError:
     GEMINI_API_KEY = ""
 
@@ -51,7 +57,7 @@ IMAGE_SKIP_HOURS = range(0, 6)    # midnight to 5:59am
 # Flask app
 # ---------------------------------------------------------------------------
 
-flaskapp = Flask(
+flaskapp = flask.Flask(
     __name__,
     static_folder="static",
     template_folder="templates",
@@ -68,7 +74,7 @@ _weather_cache = {"data": None, "timestamp": 0}
 WEATHER_CACHE_SECONDS = 15 * 60  # 15 minutes
 
 # Calendar cache (keyed by date string YYYY-MM-DD)
-_calendar_cache = defaultdict()
+_calendar_cache = collections.defaultdict()
 _last_prefetch_date_key = None
 
 # Image generation timestamp
@@ -91,28 +97,28 @@ RETRY_BACKOFF_SECONDS = 1.25
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _now():
+def _now() -> datetime.datetime:
     """Current time adjusted by debug offset."""
-    return datetime.now() + timedelta(milliseconds=_time_offset_ms)
+    return datetime.datetime.now() + datetime.timedelta(milliseconds=_time_offset_ms)
 
 
-def _parse_date(date_string):
+def _parse_date(date_string: str) -> datetime.datetime:
     """Parse a Hebcal date string into a datetime."""
     if "T" in date_string:
         # Has time component — try parsing with timezone offset
         # Format: 2026-04-01T19:27:00-04:00
         try:
-            return datetime.fromisoformat(date_string)
+            return datetime.datetime.fromisoformat(date_string)
         except ValueError:
             pass
     # Date only — treat as midnight local
     try:
-        return datetime.strptime(date_string, "%Y-%m-%d").replace(hour=0, minute=0, second=1)
+        return datetime.datetime.strptime(date_string, "%Y-%m-%d").replace(hour=0, minute=0, second=1)
     except ValueError:
-        return datetime.now()
+        return datetime.datetime.now()
 
 
-def _format_time_12h(dt):
+def _format_time_12h(dt: datetime.datetime) -> str:
     """Format a datetime as '7:32 PM'."""
     hour = dt.hour % 12 or 12
     minute = f"{dt.minute:02d}"
@@ -120,7 +126,7 @@ def _format_time_12h(dt):
     return f"{hour}:{minute} {ampm}"
 
 
-def _format_omer_count(omer_data):
+def _format_omer_count(omer_data: dict[str, typing.Any] | None) -> dict[str, str] | None:
     """Extract Omer count strings from Hebcal API data.
 
     Returns a dict with 'en' and 'he' count strings, or None.
@@ -134,7 +140,7 @@ def _format_omer_count(omer_data):
     return {"en": en, "he": count.get("he", en)}
 
 
-def _log_throttled(last_log_ts, message, interval_seconds=300):
+def _log_throttled(last_log_ts: float, message: str, interval_seconds: int = 300) -> float:
     """Log a warning at most once per interval to avoid log spam."""
     now_ts = time.time()
     if now_ts - last_log_ts >= interval_seconds:
@@ -143,7 +149,7 @@ def _log_throttled(last_log_ts, message, interval_seconds=300):
     return last_log_ts
 
 
-def _get_json_with_retries(url, label):
+def _get_json_with_retries(url: str, label: str) -> typing.Any:
     """GET JSON with basic retries for transient network errors."""
     attempts = NETWORK_RETRIES + 1
     last_exc = None
@@ -166,7 +172,7 @@ def _get_json_with_retries(url, label):
 # Weather
 # ---------------------------------------------------------------------------
 
-def fetch_weather():
+def fetch_weather() -> dict[str, typing.Any] | None:
     """Fetch weather from Open-Meteo API, cached for 15 minutes."""
     global _last_weather_error_log
 
@@ -239,7 +245,7 @@ def fetch_weather():
 # Calendar
 # ---------------------------------------------------------------------------
 
-def _fetch_calendar_events(now):
+def _fetch_calendar_events(now: datetime.datetime) -> list[dict[str, typing.Any]]:
     """Fetch calendar events from Hebcal API, cached per effective date."""
     global _last_calendar_error_log
 
@@ -249,7 +255,7 @@ def _fetch_calendar_events(now):
         return cached_events
 
     start = now.strftime("%Y-%m-%d")
-    end = (now + timedelta(days=30)).strftime("%Y-%m-%d")
+    end = (now + datetime.timedelta(days=30)).strftime("%Y-%m-%d")
 
     url = (
         f"https://www.hebcal.com/hebcal"
@@ -295,7 +301,7 @@ def _fetch_calendar_events(now):
         return _calendar_cache.get(date_key, [])
 
 
-def _prefetch_tomorrow_events_if_needed(now):
+def _prefetch_tomorrow_events_if_needed(now: datetime.datetime) -> None:
     """
     Prefetch tomorrow's Hebcal events shortly before midnight.
 
@@ -306,7 +312,7 @@ def _prefetch_tomorrow_events_if_needed(now):
     if now.hour != 23 or now.minute < 50:
         return
 
-    tomorrow = now + timedelta(days=1)
+    tomorrow = now + datetime.timedelta(days=1)
     tomorrow_key = tomorrow.strftime("%Y-%m-%d")
 
     if _last_prefetch_date_key == tomorrow_key:
@@ -320,7 +326,7 @@ def _prefetch_tomorrow_events_if_needed(now):
     logging.info("Prefetched Hebcal events for %s", tomorrow_key)
 
 
-def _get_events_for_date(now, target_date):
+def _get_events_for_date(now: datetime.datetime, target_date: datetime.datetime) -> list[dict[str, typing.Any]]:
     """Filter cached events to those matching target_date."""
     all_events = _fetch_calendar_events(now)
     return [
@@ -331,7 +337,7 @@ def _get_events_for_date(now, target_date):
     ]
 
 
-def _is_shabbat(now, candle_events, havdalah_events):
+def _is_shabbat(now: datetime.datetime, candle_events: list[dict[str, typing.Any]], havdalah_events: list[dict[str, typing.Any]]) -> bool:
     """Check if it's currently Shabbat based on day-of-week and event times."""
     weekday = now.weekday()  # Monday=0 ... Sunday=6
     naive_now = now.replace(tzinfo=None) if now.tzinfo else now
@@ -356,7 +362,7 @@ def _is_shabbat(now, candle_events, havdalah_events):
     return False
 
 
-def get_calendar_state(now):
+def get_calendar_state(now: datetime.datetime) -> dict[str, typing.Any]:
     """
     Compute the full calendar display state for the given time.
 
@@ -376,7 +382,7 @@ def get_calendar_state(now):
         if candle_time.tzinfo:
             candle_time = candle_time.replace(tzinfo=None)
         if naive_now >= candle_time:
-            tomorrow = now + timedelta(days=1)
+            tomorrow = now + datetime.timedelta(days=1)
             events = _get_events_for_date(now, tomorrow)
             candle_events = [e for e in events if e["is_candle_lighting"]]
             havdalah_events = [e for e in events if e["is_havdalah"]]
@@ -385,7 +391,7 @@ def get_calendar_state(now):
         if havdalah_time.tzinfo:
             havdalah_time = havdalah_time.replace(tzinfo=None)
         if naive_now >= havdalah_time:
-            tomorrow = now + timedelta(days=1)
+            tomorrow = now + datetime.timedelta(days=1)
             events = _get_events_for_date(now, tomorrow)
             candle_events = [e for e in events if e["is_candle_lighting"]]
             havdalah_events = [e for e in events if e["is_havdalah"]]
@@ -434,8 +440,8 @@ def get_calendar_state(now):
 
     # Background image
     bg_image = None
-    if has_current_image():
-        bg_image = f"/images/current.png?t={int(os.path.getmtime(CURRENT_IMAGE))}"
+    if image_gen.has_current_image():
+        bg_image = f"/images/current.png?t={int(os.path.getmtime(image_gen.CURRENT_IMAGE))}"
 
     return {
         "candle_lighting": candle_lighting_text,
@@ -456,7 +462,7 @@ def get_calendar_state(now):
 # Image scheduler
 # ---------------------------------------------------------------------------
 
-def _cal_state_key(cal_state):
+def _cal_state_key(cal_state: dict[str, typing.Any]) -> dict[str, typing.Any]:
     """Extract the fields used to detect whether the image is stale."""
     return {
         "holiday_name": cal_state.get("holiday_name"),
@@ -465,14 +471,14 @@ def _cal_state_key(cal_state):
     }
 
 
-def _image_is_stale(cal_state):
+def _image_is_stale(cal_state: dict[str, typing.Any]) -> bool:
     """True if the current image was generated for a different calendar state."""
     if _last_image_cal_state is None:
         return True
     return _cal_state_key(cal_state) != _last_image_cal_state
 
 
-def _image_generation_loop():
+def _image_generation_loop() -> None:
     """Background thread: generate a new image every hour (6am-midnight)."""
     global _last_image_gen, _last_image_cal_state
 
@@ -491,7 +497,7 @@ def _image_generation_loop():
                     logging.info(
                         "Image is stale (state changed) — using sync API for immediate refresh"
                     )
-                result = generate_image(GEMINI_API_KEY, weather, cal_state, now, use_batch=use_batch)
+                result = image_gen.generate_image(GEMINI_API_KEY, weather, cal_state, now, use_batch=use_batch)
                 if result:
                     _last_image_gen = time.time()
                     _last_image_cal_state = _cal_state_key(cal_state)
@@ -505,12 +511,12 @@ def _image_generation_loop():
 
 WATER_METER_POLL_SECONDS = 5
 
-def _water_meter_loop():
+def _water_meter_loop() -> None:
     """Background thread: poll the water meter every few seconds."""
     time.sleep(2)
     while True:
         try:
-            fetch_water_reading()
+            water_meter.fetch_reading()
         except Exception:
             logging.exception("Error in water meter loop")
         time.sleep(WATER_METER_POLL_SECONDS)
@@ -521,20 +527,20 @@ def _water_meter_loop():
 # ---------------------------------------------------------------------------
 
 @flaskapp.route("/")
-def index():
-    return send_from_directory("templates", "index.html")
+def index() -> flask.Response:
+    return flask.send_from_directory("templates", "index.html")
 
 
 @flaskapp.route("/api/state")
-def api_state():
+def api_state() -> flask.Response:
     now = _now()
     _prefetch_tomorrow_events_if_needed(now)
     weather = fetch_weather()
     cal_state = get_calendar_state(now)
 
-    stocks = fetch_stock_quotes()
+    stock_data = stocks.fetch_quotes()
 
-    return jsonify({
+    return flask.jsonify({
         "weather": weather,
         "candle_lighting": cal_state["candle_lighting"],
         "havdalah": cal_state["havdalah"],
@@ -546,14 +552,14 @@ def api_state():
         "is_yom_tov": cal_state["is_yom_tov"],
         "omer_count": cal_state["omer_count"],
         "next_event_epoch": cal_state["next_event_epoch"],
-        "stocks": stocks,
+        "stocks": stock_data,
     })
 
 
 @flaskapp.route("/api/offset", methods=["POST"])
-def api_offset():
+def api_offset() -> flask.Response:
     global _time_offset_ms
-    data = request.get_json(silent=True) or {}
+    data = flask.request.get_json(silent=True) or {}
     action = data.get("action")
 
     if action == "reset":
@@ -561,34 +567,34 @@ def api_offset():
     elif "offset_ms" in data:
         _time_offset_ms += int(data["offset_ms"])
 
-    return jsonify({"offset_ms": _time_offset_ms})
+    return flask.jsonify({"offset_ms": _time_offset_ms})
 
 
 @flaskapp.route("/api/test-announcement", methods=["POST"])
-def api_test_announcement():
+def api_test_announcement() -> flask.Response | tuple[flask.Response, int]:
     try:
-        data = request.get_json(silent=True) or {}
+        data = flask.request.get_json(silent=True) or {}
         host = data.get("host")  # optional: cast to a specific IP
-        ok = send_test_announcement(_PORT.value, host=host)
-        return jsonify({"ok": ok})
+        ok = announcements.send_test(_PORT.value, host=host)
+        return flask.jsonify({"ok": ok})
     except Exception as exc:
         logging.exception("Test announcement failed")
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return flask.jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @flaskapp.route("/api/chromecast-devices")
-def api_chromecast_devices():
+def api_chromecast_devices() -> flask.Response | tuple[flask.Response, int]:
     try:
-        devices = discover_chromecast_devices()
-        return jsonify({"devices": devices})
+        devices = announcements.discover_devices()
+        return flask.jsonify({"devices": devices})
     except Exception as exc:
         logging.exception("Chromecast discovery failed")
-        return jsonify({"devices": [], "error": str(exc)}), 500
+        return flask.jsonify({"devices": [], "error": str(exc)}), 500
 
 
 @flaskapp.route("/images/<path:filename>")
-def serve_image(filename):
-    return send_from_directory("images", filename)
+def serve_image(filename: str) -> flask.Response:
+    return flask.send_from_directory("images", filename)
 
 
 # ---------------------------------------------------------------------------
@@ -596,22 +602,27 @@ def serve_image(filename):
 # ---------------------------------------------------------------------------
 
 @flaskapp.route("/api/water")
-def api_water():
-    reading = get_water_reading()
-    return jsonify({"cubic_metres": reading})
+def api_water() -> flask.Response:
+    reading = water_meter.get_current_reading()
+    return flask.jsonify({"cubic_metres": reading})
 
 
 @flaskapp.route("/api/water/history")
-def api_water_history():
-    return jsonify(get_water_history())
+def api_water_history() -> flask.Response:
+    return flask.jsonify(water_meter.get_history())
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-def main(argv):
+def main(argv: list[str]) -> None:
     del argv
+
+    # Setup Google Cloud logging
+    client = google.cloud.logging.Client()
+    client.setup_logging(log_level=py_logging.INFO)
+    logging.info('Front Door Display server starting...')
 
     # Silence per-request access logs from Flask's dev server to prevent log spam.
     py_logging.getLogger("werkzeug").setLevel(py_logging.ERROR)
@@ -620,12 +631,12 @@ def main(argv):
     # Uses the sync API so the kiosk doesn't wait several minutes for a batch job.
     global _last_image_cal_state
     now = _now()
-    if not has_current_image() and now.hour not in IMAGE_SKIP_HOURS and GEMINI_API_KEY:
+    if not image_gen.has_current_image() and now.hour not in IMAGE_SKIP_HOURS and GEMINI_API_KEY:
         logging.info("No current image — generating on startup (sync)")
         try:
             weather = fetch_weather()
             cal_state = get_calendar_state(now)
-            result = generate_image(GEMINI_API_KEY, weather, cal_state, now, use_batch=False)
+            result = image_gen.generate_image(GEMINI_API_KEY, weather, cal_state, now, use_batch=False)
             if result:
                 _last_image_cal_state = _cal_state_key(cal_state)
         except Exception:
@@ -640,7 +651,7 @@ def main(argv):
     water_thread.start()
 
     # Start Shabbat announcement loop
-    start_announcement_loop(_now, _get_events_for_date, _PORT.value)
+    announcements.start_announcement_loop(_now, _get_events_for_date, _PORT.value)
 
     flaskapp.run(host="0.0.0.0", port=_PORT.value, debug=False)
 

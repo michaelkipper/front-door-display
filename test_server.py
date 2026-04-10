@@ -5,10 +5,14 @@ Ports the key test cases from ui.test.js — Shabbat detection boundaries,
 calendar event filtering, holiday classification, and prompt building.
 """
 
+from __future__ import annotations
+
+import collections.abc
+import datetime
 import json
 import time
-from datetime import datetime
-from unittest.mock import MagicMock, patch
+import typing
+import unittest.mock
 
 import pytest
 
@@ -64,7 +68,7 @@ OMER_WEEK_API_RESPONSE = {
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def reset_caches():
+def reset_caches() -> Generator[None, None, None]:
     """Reset server caches before each test."""
     import server
     server._calendar_cache.clear()
@@ -75,7 +79,7 @@ def reset_caches():
     yield
 
 
-def _mock_hebcal(api_response):
+def _mock_hebcal(api_response: dict[str, Any]) -> MagicMock:
     """Create a mock for requests.get that returns the given Hebcal API response."""
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -466,7 +470,7 @@ class TestPromptBuilder:
 
 class TestFlaskAPI:
     @pytest.fixture
-    def client(self):
+    def client(self) -> Generator[Any, None, None]:
         import server
         server.app.config["TESTING"] = True
         with server.app.test_client() as c:
@@ -535,7 +539,7 @@ water_meter_readings_total{device="esp32-cam",status="valid"} 127
 
 class TestWaterMeter:
     @pytest.fixture(autouse=True)
-    def reset_water_state(self):
+    def reset_water_state(self) -> Generator[None, None, None]:
         import water_meter
         water_meter._reading_history.clear()
         water_meter._last_reading["cubic_metres"] = None
