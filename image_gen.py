@@ -261,7 +261,13 @@ def _generate_via_sync(client: typing.Any, model_name: str, prompt: str) -> byte
         logging.error("No candidates in sync response for %s", model_name)
         return None
 
-    for part in response.candidates[0].content.parts:
+    content = response.candidates[0].content
+    if not content or not content.parts:
+        logging.error("No content/parts in sync response for %s (finish_reason=%s)",
+                       model_name, getattr(response.candidates[0], 'finish_reason', None))
+        return None
+
+    for part in content.parts:
         if part.inline_data and part.inline_data.mime_type.startswith("image/"):
             return part.inline_data.data
 
