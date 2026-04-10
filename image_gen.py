@@ -176,7 +176,7 @@ def build_image_prompt(weather: dict[str, typing.Any] | None, calendar_state: di
     # Style directive
     parts.append("Beautiful Pixar-like cartoon style, with vibrant colors")
 
-    prompt = ". ".join(parts) + "."
+    prompt = "Generate an image: " + ". ".join(parts) + "."
     return prompt
 
 
@@ -249,29 +249,40 @@ def generate_image(api_key: str, weather: dict[str, typing.Any] | None, calendar
         return None
 
 
-def _generate_via_sync(client: typing.Any, model_name: str, prompt: str) -> bytes | None:
+def _generate_via_sync(client: typing.Any, model_name: str, prompt: str, max_retries: int = 2) -> bytes | None:
     """Generate an image using the standard synchronous API."""
-    response = client.models.generate_content(
-        model=model_name,
-        contents=prompt,
-        config={"response_modalities": ["IMAGE"]},
-    )
+    for attempt in range(1, max_retries + 1):
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config={"response_modalities": ["IMAGE"]},
+        )
 
-    if not response.candidates:
-        logging.error("No candidates in sync response for %s", model_name)
-        return None
+        if not response.candidates:
+            logging.error("No candidates in sync response for %s (attempt %d/%d)",
+                          model_name, attempt, max_retries)
+            return None
 
-    content = response.candidates[0].content
-    if not content or not content.parts:
-        logging.error("No content/parts in sync response for %s (finish_reason=%s)",
-                       model_name, getattr(response.candidates[0], 'finish_reason', None))
-        return None
+        content = response.candidates[0].content
+        finish_reason = getattr(response.candidates[0], 'finish_reason', None)
+        if not content or not content.parts:
+            logging.warning("No content/parts in sync response for %s (finish_reason=%s, attempt %d/%d)",
+                            model_name, finish_reason, attempt, max_retries)
+            if attempt < max_retries:
+                time.sleep(1)
+                continue
+            return None
 
-    for part in content.parts:
-        if part.inline_data and part.inline_data.mime_type.startswith("image/"):
-            return part.inline_data.data
+        for part in content.parts:
+            if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                return part.inline_data.data
 
-    logging.error("No image data in sync response for %s", model_name)
+        logging.warning("No image data found in parts for %s (attempt %d/%d)", model_name, attempt, max_retries)
+        if attempt < max_retries:
+            time.sleep(1)
+            continue
+
+    logging.error("No image data in sync response for %s after %d attempts", model_name, max_retries)
     return None
 
 
