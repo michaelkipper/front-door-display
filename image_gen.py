@@ -32,7 +32,7 @@ MODEL_CANDIDATES = [
 ]
 
 # How often to poll for batch job completion.
-BATCH_POLL_INTERVAL_SECONDS = 5
+BATCH_POLL_INTERVAL_SECONDS = 30
 
 # WMO weather code descriptions for prompt building
 WMO_DESCRIPTIONS = {
