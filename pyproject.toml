@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "front-door-display"
+version = "0.1.0"
+description = "Front door display with weather, calendar, announcements, and more"
+requires-python = ">=3.10"
+
+[tool.pyright]
+# Standard mode - catch obvious errors while allowing necessary 'Any' types
+typeCheckingMode = "standard"
+
+# Python version target (matches 'from __future__ import annotations' usage)
+pythonVersion = "3.10"
+
+# Analysis settings
+reportMissingTypeStubs = false          # Allow packages without complete stubs
+reportUnusedImport = "warning"          # Warn about unused imports
+reportUnusedVariable = "warning"        # Warn about unused variables
+reportMissingParameterType = "warning"  # Warn about missing parameter types
+reportGeneralTypeIssues = "error"       # Catch type mismatches as errors
+reportOptionalOperand = "error"         # Catch operations on None values
+
+# Include all Python files (except test infrastructure-specific issues)
+include = ["**/*.py"]
+
+# Main code to check strictly
+include = ["announcements.py", "server.py", "image_gen.py", "stocks.py", "water_meter.py", "config.py"]
+
+# Exclude auxiliary files
+exclude = [".venv", "*.egg-info", "__pycache__", ".git", "images/", "static/", "templates/"]
+
+# Test files use basic checking due to pytest fixture patterns
+defineConstants = []

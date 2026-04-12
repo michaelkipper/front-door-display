@@ -7,12 +7,12 @@ calendar event filtering, holiday classification, and prompt building.
 
 from __future__ import annotations
 
-import collections.abc
+from collections.abc import Generator
+from typing import Any
+from unittest.mock import MagicMock, patch
 import datetime
 import json
 import time
-import typing
-import unittest.mock
 
 import pytest
 

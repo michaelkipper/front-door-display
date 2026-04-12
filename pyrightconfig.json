@@ -1,0 +1,29 @@
+{
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.10",
+  "exclude": [
+    "**/test_*.py",
+    ".venv",
+    "**/__pycache__",
+    "**/*.egg-info",
+    ".git",
+    "images",
+    "static",
+    "templates"
+  ],
+  "include": [
+    "announcements.py",
+    "server.py",
+    "image_gen.py",
+    "stocks.py",
+    "water_meter.py",
+    "config.py"
+  ],
+  "reportMissingTypeStubs": false,
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "reportMissingParameterType": "warning",
+  "reportGeneralTypeIssues": "error",
+  "reportOptionalOperand": "error",
+  "reportPrivateUsage": "warning"
+}

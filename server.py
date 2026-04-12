@@ -14,7 +14,7 @@ from absl import flags
 from absl import logging
 import collections
 import datetime
-import google.cloud.logging
+import google.cloud.logging  # type: ignore[import-not-found]
 import logging as py_logging
 import os
 import requests
@@ -152,7 +152,7 @@ def _log_throttled(last_log_ts: float, message: str, interval_seconds: int = 300
 def _get_json_with_retries(url: str, label: str) -> typing.Any:
     """GET JSON with basic retries for transient network errors."""
     attempts = NETWORK_RETRIES + 1
-    last_exc = None
+    last_exc: requests.RequestException | None = None
 
     for attempt in range(1, attempts + 1):
         try:
@@ -165,6 +165,8 @@ def _get_json_with_retries(url: str, label: str) -> typing.Any:
                 logging.warning("%s request failed (%d/%d): %s", label, attempt, attempts, exc)
                 time.sleep(RETRY_BACKOFF_SECONDS * attempt)
 
+    if last_exc is None:
+        raise RuntimeError(f"Unexpected: no exception raised for {label}")
     raise last_exc
 
 

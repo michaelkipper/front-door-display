@@ -70,9 +70,9 @@ def discover_devices(timeout: int = 10) -> list[dict]:
         return _discovery_cache["devices"]
 
     logging.info("Scanning for all Chromecast devices (timeout=%ds)...", timeout)
-    browser = pychromecast.CastBrowser(
-        pychromecast.SimpleCastListener(lambda uuid, name: None),
-        pychromecast.zeroconf.Zeroconf(),
+    browser = pychromecast.CastBrowser(  # type: ignore[attr-defined]
+        pychromecast.SimpleCastListener(lambda uuid, name: None),  # type: ignore[attr-defined]
+        pychromecast.zeroconf.Zeroconf(),  # type: ignore[attr-defined]
     )
     browser.start_discovery()
     time.sleep(timeout)
@@ -106,7 +106,7 @@ def discover_devices(timeout: int = 10) -> list[dict]:
     return devices
 
 
-def _resolve_speaker_cast_info() -> typing.Any:
+def _resolve_speaker_cast_info() -> pychromecast.CastInfo | None:  # type: ignore[name-defined]
     """Look up the CastInfo for SPEAKER_NAME via cached discovery."""
     discover_devices()
     cast_info = _discovery_cache["cast_infos"].get(SPEAKER_NAME)
@@ -144,7 +144,7 @@ def _play_on_device(cast: typing.Any, audio_url: str) -> None:
     )
 
 
-def _connect_by_cast_info(cast_info: typing.Any) -> typing.Any:
+def _connect_by_cast_info(cast_info: typing.Any) -> pychromecast.Chromecast:
     """Connect to a Chromecast using a discovered CastInfo.
 
     Replaces MDNSServiceInfo services with a HostServiceInfo so the socket
@@ -152,8 +152,8 @@ def _connect_by_cast_info(cast_info: typing.Any) -> typing.Any:
     """
     logging.info("Connecting to Chromecast '%s' at %s:%s...",
                  cast_info.friendly_name, cast_info.host, cast_info.port)
-    host_service = pychromecast.HostServiceInfo(host=cast_info.host, port=cast_info.port)
-    direct_info = pychromecast.CastInfo(
+    host_service = pychromecast.HostServiceInfo(host=cast_info.host, port=cast_info.port)  # type: ignore[attr-defined]
+    direct_info = pychromecast.CastInfo(  # type: ignore[attr-defined]
         services={host_service},
         uuid=cast_info.uuid,
         model_name=cast_info.model_name,
@@ -166,12 +166,12 @@ def _connect_by_cast_info(cast_info: typing.Any) -> typing.Any:
     return pychromecast.Chromecast(direct_info)
 
 
-def _connect_by_host(host: str, port: int = 8009) -> typing.Any:
+def _connect_by_host(host: str, port: int = 8009) -> pychromecast.Chromecast:
     """Connect to a Chromecast directly by IP (fallback for /api/test-announcement?host=)."""
     logging.info("Connecting directly to Chromecast at %s:%s...", host, port)
     from uuid import UUID
-    service = pychromecast.HostServiceInfo(host=host, port=port)
-    cast_info = pychromecast.CastInfo(
+    service = pychromecast.HostServiceInfo(host=host, port=port)  # type: ignore[attr-defined]
+    cast_info = pychromecast.CastInfo(  # type: ignore[attr-defined]
         services={service},
         uuid=UUID(int=0),
         model_name=None,

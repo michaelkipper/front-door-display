@@ -220,7 +220,7 @@ def generate_image(api_key: str, weather: dict[str, typing.Any] | None, calendar
                 used_model = model_name
                 break
             except google.genai.errors.ClientError as exc:
-                if exc.status_code == 404:
+                if exc.status_code == 404:  # type: ignore[attr-defined]
                     logging.warning("Gemini model unavailable: %s", model_name)
                     continue
                 raise
