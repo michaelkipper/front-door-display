@@ -3,6 +3,6 @@
 # Type checking and static analysis
 pyright>=1.1.300      # Python static type checker (VSCode/Pylance compatible)
 
-# Testing (optional)
-pytest>=7.0           # Testing framework (if running tests locally)
+# Testing
+pytest>=7.0           # Testing framework
 

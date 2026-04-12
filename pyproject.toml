@@ -8,6 +8,11 @@ version = "0.1.0"
 description = "Front door display with weather, calendar, announcements, and more"
 requires-python = ">=3.10"
 
+[tool.pytest.ini_options]
+python_files = ["*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
 [tool.pyright]
 # Standard mode - catch obvious errors while allowing necessary 'Any' types
 typeCheckingMode = "standard"
@@ -23,14 +28,8 @@ reportMissingParameterType = "warning"  # Warn about missing parameter types
 reportGeneralTypeIssues = "error"       # Catch type mismatches as errors
 reportOptionalOperand = "error"         # Catch operations on None values
 
-# Include all Python files (except test infrastructure-specific issues)
-include = ["**/*.py"]
-
-# Main code to check strictly
+# Main code to check strictly (test files excluded — pytest patterns cause false positives)
 include = ["announcements.py", "server.py", "image_gen.py", "stocks.py", "water_meter.py", "config.py"]
 
 # Exclude auxiliary files
 exclude = [".venv", "*.egg-info", "__pycache__", ".git", "images/", "static/", "templates/"]
-
-# Test files use basic checking due to pytest fixture patterns
-defineConstants = []
