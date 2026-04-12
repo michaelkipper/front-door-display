@@ -16,8 +16,7 @@
     "server.py",
     "image_gen.py",
     "stocks.py",
-    "water_meter.py",
-    "config.py"
+    "water_meter.py"
   ],
   "reportMissingTypeStubs": false,
   "reportUnusedImport": "warning",

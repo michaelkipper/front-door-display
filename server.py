@@ -35,7 +35,7 @@ _PORT = flags.DEFINE_integer("port", 8080, "Port to listen on")
 # ---------------------------------------------------------------------------
 
 try:
-    import config
+    import config  # type: ignore[import-not-found]
     GEMINI_API_KEY = config.GEMINI_API_KEY
 except ImportError:
     GEMINI_API_KEY = ""
