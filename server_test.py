@@ -8,9 +8,9 @@ calendar event filtering, holiday classification, and prompt building.
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
-import datetime
 import json
 import time
 
@@ -472,8 +472,8 @@ class TestFlaskAPI:
     @pytest.fixture
     def client(self) -> Generator[Any, None, None]:
         import server
-        server.app.config["TESTING"] = True
-        with server.app.test_client() as c:
+        server.flaskapp.config["TESTING"] = True
+        with server.flaskapp.test_client() as c:
             yield c
 
     def test_index_returns_html(self, client):

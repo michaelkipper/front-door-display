@@ -14,7 +14,11 @@ from absl import flags
 from absl import logging
 import collections
 import datetime
-import google.cloud.logging  # type: ignore[import-not-found]
+try:
+    import google.cloud.logging  # type: ignore[import-not-found]
+    _CLOUD_LOGGING_AVAILABLE = True
+except ImportError:
+    _CLOUD_LOGGING_AVAILABLE = False
 import logging as py_logging
 import os
 import requests
@@ -622,8 +626,9 @@ def main(argv: list[str]) -> None:
     del argv
 
     # Setup Google Cloud logging
-    client = google.cloud.logging.Client()
-    client.setup_logging(log_level=py_logging.INFO)
+    if _CLOUD_LOGGING_AVAILABLE:
+        client = google.cloud.logging.Client()
+        client.setup_logging(log_level=py_logging.INFO)
     logging.info('Front Door Display server starting...')
 
     # Silence per-request access logs from Flask's dev server to prevent log spam.
