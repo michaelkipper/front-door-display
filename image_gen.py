@@ -19,6 +19,7 @@ import time
 
 import google.genai
 import google.genai.errors
+import google.genai.types
 
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
 CURRENT_IMAGE = os.path.join(IMAGES_DIR, "current.png")
@@ -33,6 +34,10 @@ MODEL_CANDIDATES = [
 
 # How often to poll for batch job completion.
 BATCH_POLL_INTERVAL_SECONDS = 30
+
+# Image output settings for the Raspberry Pi Touch Display 2 in landscape mode (1280x720).
+IMAGE_ASPECT_RATIO = "16:9"
+IMAGE_SIZE = "2K"
 
 # WMO weather code descriptions for prompt building
 WMO_DESCRIPTIONS = {
@@ -263,7 +268,13 @@ def _generate_via_sync(client: typing.Any, model_name: str, prompt: str, max_ret
         response = client.models.generate_content(
             model=model_name,
             contents=prompt,
-            config={"response_modalities": ["IMAGE"]},
+            config=google.genai.types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                image_config=google.genai.types.ImageConfig(
+                    aspect_ratio=IMAGE_ASPECT_RATIO,
+                    image_size=IMAGE_SIZE,
+                ),
+            ),
         )
 
         if not response.candidates:
@@ -305,6 +316,10 @@ def _generate_via_batch(client: typing.Any, model_name: str, prompt: str) -> byt
             }],
             "config": {
                 "response_modalities": ["IMAGE"],
+                "image_config": {
+                    "aspect_ratio": IMAGE_ASPECT_RATIO,
+                    "image_size": IMAGE_SIZE,
+                },
             },
         }],
         config={"display_name": "front-door-image"},
