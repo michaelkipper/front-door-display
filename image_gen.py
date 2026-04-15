@@ -235,13 +235,21 @@ def generate_image(api_key: str, weather: dict[str, typing.Any] | None, calendar
         if image_data is None:
             return None
 
-        _archive_current_image()
-
-        os.makedirs(IMAGES_DIR, exist_ok=True)
-        with open(CURRENT_IMAGE, "wb") as f:
+        os.makedirs(HISTORY_DIR, exist_ok=True)
+        timestamp = int(time.time())
+        history_path = os.path.join(HISTORY_DIR, f"{timestamp}.png")
+        with open(history_path, "wb") as f:
             f.write(image_data)
 
-        logging.info("Generated and saved new image to %s using %s (%s)", CURRENT_IMAGE, used_model, mode)
+        # Atomically update the symlink to point to the new image.
+        rel_target = os.path.join("history", f"{timestamp}.png")
+        tmp_link = CURRENT_IMAGE + ".tmp"
+        os.symlink(rel_target, tmp_link)
+        os.replace(tmp_link, CURRENT_IMAGE)
+
+        _cleanup_image_history()
+
+        logging.info("Generated and saved new image to %s using %s (%s)", history_path, used_model, mode)
         return CURRENT_IMAGE
 
     except Exception:
@@ -316,7 +324,7 @@ def _generate_via_batch(client: typing.Any, model_name: str, prompt: str) -> byt
     while batch_job.state.name not in completed_states:
         time.sleep(BATCH_POLL_INTERVAL_SECONDS)
         batch_job = client.batches.get(name=batch_job.name)
-        logging.info("Batch job %s state: %s", batch_job.name, batch_job.state.name)
+        logging.debug("Batch job %s state: %s", batch_job.name, batch_job.state.name)
 
     if batch_job.state.name != "JOB_STATE_SUCCEEDED":
         logging.error(
@@ -348,21 +356,8 @@ def _extract_image_from_batch(batch_job: typing.Any) -> bytes | None:
     return None
 
 
-def _archive_current_image() -> None:
-    """Move current.png to history/ with a timestamp, keeping the last 24."""
-    if not os.path.exists(CURRENT_IMAGE):
-        return
-
-    os.makedirs(HISTORY_DIR, exist_ok=True)
-    timestamp = int(time.time())
-    archive_path = os.path.join(HISTORY_DIR, f"{timestamp}.png")
-
-    try:
-        os.rename(CURRENT_IMAGE, archive_path)
-    except OSError:
-        logging.warning("Failed to archive current image")
-
-    # Clean up old history, keeping only the last 24
+def _cleanup_image_history() -> None:
+    """Remove old images from history/, keeping only the last 24."""
     try:
         files = sorted(
             (f for f in os.listdir(HISTORY_DIR) if f.endswith(".png")),

@@ -403,3 +403,106 @@ body.shabbat-background {
     font-size: 22px;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Image history gallery                                               */
+/* ------------------------------------------------------------------ */
+
+#gallery-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 200;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+  overflow-y: auto;
+  padding: 70px 30px 30px;
+  box-sizing: border-box;
+}
+#gallery-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#gallery-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #c82333;
+  color: #fff;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 201;
+}
+#gallery-close:hover {
+  background: #e11d48;
+}
+
+#gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.gallery-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  display: block;
+}
+.gallery-thumb:hover {
+  border-color: #eaeaea;
+  transform: scale(1.03);
+}
+
+.gallery-empty {
+  color: #888;
+  font-size: 2vw;
+  text-align: center;
+  grid-column: 1 / -1;
+  padding: 40px 0;
+}
+
+/* Lightbox */
+#gallery-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.97);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  cursor: pointer;
+}
+#gallery-lightbox.visible {
+  opacity: 1;
+  visibility: visible;
+}
+#gallery-lightbox-img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: 6px;
+  pointer-events: none;
+}

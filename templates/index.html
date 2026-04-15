@@ -80,6 +80,17 @@
       </div>
     </div>
 
+    <!-- Image history gallery overlay -->
+    <div id="gallery-overlay">
+      <button id="gallery-close">&times;</button>
+      <div id="gallery-grid"></div>
+    </div>
+
+    <!-- Gallery lightbox (maximized single image) -->
+    <div id="gallery-lightbox">
+      <img id="gallery-lightbox-img" src="" alt="" />
+    </div>
+
     <script>
       // --- DOM elements ---
       const timeStringEl = document.getElementById("time-string");
@@ -404,6 +415,101 @@
         omerShowHebrew = !omerShowHebrew;
         omerInfoEl.textContent = omerShowHebrew ? omerInfoEl.dataset.he : omerInfoEl.dataset.en;
       });
+
+      // --- Image history gallery ---
+      const galleryOverlayEl = document.getElementById("gallery-overlay");
+      const galleryCloseEl = document.getElementById("gallery-close");
+      const galleryGridEl = document.getElementById("gallery-grid");
+      const galleryLightboxEl = document.getElementById("gallery-lightbox");
+      const galleryLightboxImgEl = document.getElementById("gallery-lightbox-img");
+
+      const GALLERY_LONG_PRESS_MS = 600;
+      let galleryLongPressTimer = null;
+      let galleryLongPressX = 0;
+      let galleryLongPressY = 0;
+
+      // Suppress the browser context menu that appears on long-press (touch).
+      document.body.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+      function isInteractiveTarget(el) {
+        return !!el.closest("button, a, input, select, #offset-trigger, #water-reading, #omer-info, #gallery-overlay, #gallery-lightbox");
+      }
+
+      function startLongPress(e) {
+        if (isInteractiveTarget(e.target)) return;
+        const pt = e.touches ? e.touches[0] : e;
+        galleryLongPressX = pt.clientX;
+        galleryLongPressY = pt.clientY;
+        galleryLongPressTimer = setTimeout(openGallery, GALLERY_LONG_PRESS_MS);
+      }
+
+      function cancelLongPress(e) {
+        if (!galleryLongPressTimer) return;
+        if (e && e.type === "mousemove") {
+          // Only cancel mouse moves that travel more than 5px (allow finger resting).
+          const pt = e;
+          const dx = pt.clientX - galleryLongPressX;
+          const dy = pt.clientY - galleryLongPressY;
+          if (dx * dx + dy * dy <= 25) return;
+        }
+        clearTimeout(galleryLongPressTimer);
+        galleryLongPressTimer = null;
+      }
+
+      document.body.addEventListener("touchstart", startLongPress, { passive: true });
+      document.body.addEventListener("touchend", cancelLongPress);
+      document.body.addEventListener("touchmove", cancelLongPress, { passive: true });
+      document.body.addEventListener("mousedown", startLongPress);
+      document.body.addEventListener("mouseup", cancelLongPress);
+      document.body.addEventListener("mousemove", cancelLongPress);
+
+      async function openGallery() {
+        galleryLongPressTimer = null;
+        galleryGridEl.innerHTML = "";
+        galleryOverlayEl.classList.add("visible");
+        try {
+          const resp = await fetch("/api/images/history");
+          if (!resp.ok) return;
+          const data = await resp.json();
+          if (!data.images || !data.images.length) {
+            galleryGridEl.innerHTML = '<p class="gallery-empty">No historical images yet.</p>';
+            return;
+          }
+          data.images.forEach(function (url) {
+            const img = document.createElement("img");
+            img.className = "gallery-thumb";
+            img.src = url;
+            img.alt = "";
+            img.addEventListener("click", function (e) {
+              e.stopPropagation();
+              openLightbox(url);
+            });
+            galleryGridEl.appendChild(img);
+          });
+        } catch (err) {
+          console.error("Failed to load image history:", err);
+        }
+      }
+
+      function closeGallery() {
+        galleryOverlayEl.classList.remove("visible");
+      }
+
+      function openLightbox(url) {
+        galleryLightboxImgEl.src = url;
+        galleryLightboxEl.classList.add("visible");
+      }
+
+      function closeLightbox() {
+        galleryLightboxEl.classList.remove("visible");
+      }
+
+      galleryCloseEl.addEventListener("click", function (e) {
+        e.stopPropagation();
+        closeGallery();
+      });
+
+      galleryLightboxEl.addEventListener("click", closeLightbox);
 
       // --- Initialize ---
       updateClock();

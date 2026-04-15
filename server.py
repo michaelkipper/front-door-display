@@ -603,6 +603,20 @@ def serve_image(filename: str) -> flask.Response:
     return flask.send_from_directory("images", filename)
 
 
+@flaskapp.route("/api/images/history")
+def api_images_history() -> flask.Response:
+    """Return a list of historical image URLs, newest first."""
+    try:
+        files = sorted(
+            (f for f in os.listdir(image_gen.HISTORY_DIR) if f.endswith(".png")),
+            reverse=True,
+        )
+    except FileNotFoundError:
+        files = []
+    urls = [f"/images/history/{f}" for f in files]
+    return flask.jsonify({"images": urls})
+
+
 # ---------------------------------------------------------------------------
 # Water meter routes
 # ---------------------------------------------------------------------------
