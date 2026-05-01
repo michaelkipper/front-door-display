@@ -23,6 +23,7 @@ SPEAKER_NAME = "Kitchen display"
 ANNOUNCEMENT_FILE = os.path.join("static", "announcement.mp3")
 CHECK_INTERVAL_SECONDS = 30
 DISCOVERY_CACHE_SECONDS = 5 * 60  # 5 minutes
+CONNECT_PROBE_TIMEOUT_SECONDS = 1.5
 
 # Track announced events to avoid repeats.
 _announced_events = set()
@@ -118,12 +119,21 @@ def _resolve_speaker_cast_info() -> pychromecast.CastInfo | None:  # type: ignor
     return cast_info
 
 
-def _play_on_device(cast: typing.Any, audio_url: str) -> None:
+def _play_on_device(
+    cast: typing.Any,
+    audio_url: str,
+    target_host: str | None = None,
+    target_port: int | None = None,
+) -> None:
     """Play audio on an already-discovered Chromecast device."""
+    resolved_host = target_host or getattr(cast.socket_client, "host", None)
+    if resolved_host in (None, "", "unknown"):
+        resolved_host = "unknown"
+    resolved_port = target_port or getattr(cast.socket_client, "port", None)
     logging.info(
         "Casting to device: name='%s', model='%s', host=%s:%s, uuid=%s",
         cast.name, cast.model_name,
-        cast.socket_client.host, cast.socket_client.port, cast.uuid,
+        resolved_host, resolved_port, cast.uuid,
     )
     cast.wait()
     logging.info(
@@ -144,6 +154,24 @@ def _play_on_device(cast: typing.Any, audio_url: str) -> None:
     )
 
 
+def _is_tcp_reachable(host: str, port: int, timeout: float = CONNECT_PROBE_TIMEOUT_SECONDS) -> bool:
+    """Fast reachability probe used to avoid long pychromecast retries."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _create_chromecast(cast_info: typing.Any) -> pychromecast.Chromecast:
+    """Create a Chromecast client, preferring low-retry settings when supported."""
+    try:
+        return pychromecast.Chromecast(cast_info, tries=1, retry_wait=1.0)
+    except TypeError:
+        # Backward compatibility for pychromecast versions without these kwargs.
+        return pychromecast.Chromecast(cast_info)
+
+
 def _connect_by_cast_info(cast_info: typing.Any) -> pychromecast.Chromecast:
     """Connect to a Chromecast using a discovered CastInfo.
 
@@ -152,6 +180,8 @@ def _connect_by_cast_info(cast_info: typing.Any) -> pychromecast.Chromecast:
     """
     logging.info("Connecting to Chromecast '%s' at %s:%s...",
                  cast_info.friendly_name, cast_info.host, cast_info.port)
+    if not _is_tcp_reachable(str(cast_info.host), int(cast_info.port)):
+        raise OSError(f"Chromecast unreachable at {cast_info.host}:{cast_info.port}")
     host_service = pychromecast.HostServiceInfo(host=cast_info.host, port=cast_info.port)  # type: ignore[attr-defined]
     direct_info = pychromecast.CastInfo(  # type: ignore[attr-defined]
         services={host_service},
@@ -163,12 +193,14 @@ def _connect_by_cast_info(cast_info: typing.Any) -> pychromecast.Chromecast:
         cast_type=cast_info.cast_type,
         manufacturer=cast_info.manufacturer,
     )
-    return pychromecast.Chromecast(direct_info)
+    return _create_chromecast(direct_info)
 
 
 def _connect_by_host(host: str, port: int = 8009) -> pychromecast.Chromecast:
     """Connect to a Chromecast directly by IP (fallback for /api/test-announcement?host=)."""
     logging.info("Connecting directly to Chromecast at %s:%s...", host, port)
+    if not _is_tcp_reachable(host, port):
+        raise OSError(f"Chromecast unreachable at {host}:{port}")
     from uuid import UUID
     service = pychromecast.HostServiceInfo(host=host, port=port)  # type: ignore[attr-defined]
     cast_info = pychromecast.CastInfo(  # type: ignore[attr-defined]
@@ -181,7 +213,7 @@ def _connect_by_host(host: str, port: int = 8009) -> pychromecast.Chromecast:
         cast_type="cast",
         manufacturer=None,
     )
-    return pychromecast.Chromecast(cast_info)
+    return _create_chromecast(cast_info)
 
 
 def _cast_to_speakers(audio_url: str) -> bool:
@@ -189,30 +221,34 @@ def _cast_to_speakers(audio_url: str) -> bool:
     cast_info = _resolve_speaker_cast_info()
     if not cast_info:
         return False
-    cast = _connect_by_cast_info(cast_info)
+    cast = None
     try:
-        _play_on_device(cast, audio_url)
+        cast = _connect_by_cast_info(cast_info)
+        _play_on_device(cast, audio_url, str(cast_info.host), int(cast_info.port))
         logging.info("Announcement cast to '%s' (%s)", SPEAKER_NAME, cast_info.host)
         return True
     except Exception:
         logging.exception("Failed to cast to '%s' (%s)", SPEAKER_NAME, cast_info.host)
         return False
     finally:
-        cast.disconnect()
+        if cast:
+            cast.disconnect()
 
 
 def _cast_to_host(host: str, audio_url: str) -> bool:
     """Cast an audio URL to a specific Chromecast by IP address."""
-    cast = _connect_by_host(host)
+    cast = None
     try:
-        _play_on_device(cast, audio_url)
+        cast = _connect_by_host(host)
+        _play_on_device(cast, audio_url, host, 8009)
         logging.info("Announcement cast to %s", host)
         return True
     except Exception:
         logging.exception("Failed to cast to %s", host)
         return False
     finally:
-        cast.disconnect()
+        if cast:
+            cast.disconnect()
 
 
 def _broadcast(text: str, server_port: int) -> bool:

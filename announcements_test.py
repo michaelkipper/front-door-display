@@ -106,12 +106,29 @@ class TestGetLocalIp:
 
 class TestGenerateTts:
     def test_calls_gtts_save(self):
-        with patch("announcements.gTTS") as MockGTTS:
+        with patch("announcements.gtts.gTTS") as MockGTTS:
             mock_tts = MagicMock()
             MockGTTS.return_value = mock_tts
             announcements._generate_tts("Hello world")
             MockGTTS.assert_called_once_with(text="Hello world", lang="en")
             mock_tts.save.assert_called_once_with(announcements.ANNOUNCEMENT_FILE)
+
+
+# ---------------------------------------------------------------------------
+# _is_tcp_reachable
+# ---------------------------------------------------------------------------
+
+class TestIsTcpReachable:
+    def test_returns_true_when_socket_opens(self):
+        with patch("announcements.socket.create_connection") as mock_connect:
+            result = announcements._is_tcp_reachable("192.168.2.24", 8009)
+        assert result is True
+        mock_connect.assert_called_once_with(("192.168.2.24", 8009), timeout=announcements.CONNECT_PROBE_TIMEOUT_SECONDS)
+
+    def test_returns_false_on_oserror(self):
+        with patch("announcements.socket.create_connection", side_effect=OSError("unreachable")):
+            result = announcements._is_tcp_reachable("192.168.2.24", 8009)
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +180,14 @@ class TestCastToSpeakers:
             result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
         assert result is False
 
+    def test_connect_failure_returns_false(self):
+        fake_cast_info = MagicMock()
+        fake_cast_info.host = "192.168.2.24"
+        with patch("announcements._resolve_speaker_cast_info", return_value=fake_cast_info), \
+             patch("announcements._connect_by_cast_info", side_effect=OSError("unreachable")):
+            result = announcements._cast_to_speakers("http://host:8080/audio.mp3")
+        assert result is False
+
 
 # ---------------------------------------------------------------------------
 # _cast_to_host
@@ -184,6 +209,11 @@ class TestCastToHost:
             result = announcements._cast_to_host("192.168.2.99", "http://host:8080/audio.mp3")
         assert result is False
         cast.disconnect.assert_called_once()
+
+    def test_connect_failure_returns_false(self):
+        with patch("announcements._connect_by_host", side_effect=OSError("unreachable")):
+            result = announcements._cast_to_host("192.168.2.99", "http://host:8080/audio.mp3")
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
