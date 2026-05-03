@@ -123,12 +123,22 @@ class TestIsTcpReachable:
         with patch("announcements.socket.create_connection") as mock_connect:
             result = announcements._is_tcp_reachable("192.168.2.24", 8009)
         assert result is True
-        mock_connect.assert_called_once_with(("192.168.2.24", 8009), timeout=announcements.CONNECT_PROBE_TIMEOUT_SECONDS)
+        assert mock_connect.call_count == 1
+        assert mock_connect.call_args[0][0] == ("192.168.2.24", 8009)
+        assert mock_connect.call_args.kwargs["timeout"] == announcements.CONNECT_PROBE_TIMEOUT_SECONDS
 
     def test_returns_false_on_oserror(self):
         with patch("announcements.socket.create_connection", side_effect=OSError("unreachable")):
             result = announcements._is_tcp_reachable("192.168.2.24", 8009)
         assert result is False
+
+    def test_retries_before_false(self):
+        with patch("announcements.socket.create_connection", side_effect=OSError("unreachable")) as mock_connect, \
+             patch("announcements.time.sleep") as mock_sleep:
+            result = announcements._is_tcp_reachable("192.168.2.24", 8009, attempts=3)
+        assert result is False
+        assert mock_connect.call_count == 3
+        assert mock_sleep.call_count == 2
 
 
 # ---------------------------------------------------------------------------

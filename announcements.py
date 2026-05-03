@@ -24,6 +24,8 @@ ANNOUNCEMENT_FILE = os.path.join("static", "announcement.mp3")
 CHECK_INTERVAL_SECONDS = 30
 DISCOVERY_CACHE_SECONDS = 5 * 60  # 5 minutes
 CONNECT_PROBE_TIMEOUT_SECONDS = 1.5
+CONNECT_PROBE_ATTEMPTS = 3
+CONNECT_PROBE_BACKOFF_SECONDS = 0.5
 
 # Track announced events to avoid repeats.
 _announced_events = set()
@@ -154,13 +156,29 @@ def _play_on_device(
     )
 
 
-def _is_tcp_reachable(host: str, port: int, timeout: float = CONNECT_PROBE_TIMEOUT_SECONDS) -> bool:
+def _is_tcp_reachable(
+    host: str,
+    port: int,
+    timeout: float = CONNECT_PROBE_TIMEOUT_SECONDS,
+    attempts: int = CONNECT_PROBE_ATTEMPTS,
+) -> bool:
     """Fast reachability probe used to avoid long pychromecast retries."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
+    for attempt in range(1, attempts + 1):
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except OSError as exc:
+            logging.warning(
+                "TCP probe failed for %s:%s (%d/%d): %s",
+                host,
+                port,
+                attempt,
+                attempts,
+                exc,
+            )
+            if attempt < attempts:
+                time.sleep(CONNECT_PROBE_BACKOFF_SECONDS * attempt)
+    return False
 
 
 def _create_chromecast(cast_info: typing.Any) -> pychromecast.Chromecast:
