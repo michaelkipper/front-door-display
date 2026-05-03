@@ -27,6 +27,9 @@ CONNECT_PROBE_TIMEOUT_SECONDS = 1.5
 CONNECT_PROBE_ATTEMPTS = 3
 CONNECT_PROBE_BACKOFF_SECONDS = 0.5
 DINNER_BELL_TEXT = "Attention Kipper Family! Dinner is served in the kitchen."
+DINNER_BELL_VOLUME_LEVEL = 0.5
+MEDIA_STATUS_POLL_INTERVAL_SECONDS = 0.25
+MEDIA_FINISH_TIMEOUT_SECONDS = 60.0
 PREFERRED_SPEAKER_GROUP_NAME = "All Speakers"
 
 # Track announced events to avoid repeats.
@@ -158,6 +161,36 @@ def _play_on_device(
         mc.status.player_state if mc.status else None,
         mc.status.content_id if mc.status else None,
     )
+
+
+def _wait_for_media_to_finish(
+    media_controller: typing.Any,
+    timeout_seconds: float = MEDIA_FINISH_TIMEOUT_SECONDS,
+) -> None:
+    """Wait until the current media item is no longer actively playing."""
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds > 0 else None
+    while True:
+        update_status = getattr(media_controller, "update_status", None)
+        if callable(update_status):
+            try:
+                update_status()
+            except Exception:
+                logging.exception("Failed to refresh media status while waiting for playback to finish")
+                return
+
+        status = getattr(media_controller, "status", None)
+        player_state = getattr(status, "player_state", None)
+        if player_state in (None, "UNKNOWN", "IDLE"):
+            return
+
+        if deadline is not None and time.monotonic() >= deadline:
+            logging.warning(
+                "Timed out waiting for media playback to finish (state=%s)",
+                player_state,
+            )
+            return
+
+        time.sleep(MEDIA_STATUS_POLL_INTERVAL_SECONDS)
 
 
 def _is_tcp_reachable(
@@ -301,13 +334,27 @@ def _cast_to_all_speakers(audio_url: str) -> tuple[int, int]:
     if not chosen_group:
         chosen_group = sorted(group_infos, key=lambda g: (g.friendly_name or ""))[0]
 
+    selected_group = typing.cast(typing.Any, chosen_group)
+
     cast = None
-    host = str(chosen_group.host)
-    port = int(chosen_group.port)
-    name = chosen_group.friendly_name or host
+    previous_volume: float | None = None
+    previous_muted: bool | None = None
+    host = str(selected_group.host)
+    port = int(selected_group.port)
+    name = selected_group.friendly_name or host
     try:
-        cast = _connect_by_cast_info(chosen_group)
+        cast = _connect_by_cast_info(selected_group)
+        cast.wait()
+        if cast.status:
+            previous_volume = cast.status.volume_level
+            previous_muted = cast.status.volume_muted
+
+        if previous_muted:
+            cast.set_volume_muted(False)
+        cast.set_volume(DINNER_BELL_VOLUME_LEVEL)
+
         _play_on_device(cast, audio_url, host, port)
+        _wait_for_media_to_finish(cast.media_controller)
         logging.info("Dinner bell cast to speaker group '%s' (%s:%s)", name, host, port)
         return (1, 1)
     except Exception:
@@ -315,6 +362,13 @@ def _cast_to_all_speakers(audio_url: str) -> tuple[int, int]:
         return (0, 1)
     finally:
         if cast:
+            try:
+                if previous_volume is not None:
+                    cast.set_volume(previous_volume)
+                if previous_muted is not None:
+                    cast.set_volume_muted(previous_muted)
+            except Exception:
+                logging.exception("Failed to restore cast volume for dinner bell on '%s'", name)
             cast.disconnect()
 
 
@@ -322,7 +376,7 @@ def _broadcast(text: str, server_port: int) -> bool:
     """Generate TTS audio and cast it to the speaker group."""
     filename = _generate_tts(text)
     local_ip = _get_local_ip()
-    audio_url = f"http://{local_ip}:{server_port}/static/announcement.mp3"
+    audio_url = f"http://{local_ip}:{server_port}/{filename}"
     return _cast_to_speakers(audio_url)
 
 

@@ -79,6 +79,16 @@ body.shabbat-background {
   transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
+.dinner-bell svg {
+  width: 58%;
+  height: 58%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .dinner-bell:hover {
   transform: scale(1.05);
   background: rgba(35, 35, 35, 0.85);
@@ -401,7 +411,6 @@ body.shabbat-background {
   .dinner-bell {
     width: 62px;
     height: 62px;
-    font-size: 32px;
   }
   .date {
     font-size: 48px;

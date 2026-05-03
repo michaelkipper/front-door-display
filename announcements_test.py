@@ -281,6 +281,7 @@ class TestDinnerBell:
         with patch("announcements._generate_tts") as mock_tts, \
              patch("announcements._get_local_ip", return_value="192.168.2.10"), \
              patch("announcements._cast_to_all_speakers", return_value=(2, 3)) as mock_cast:
+            mock_tts.return_value = announcements.ANNOUNCEMENT_FILE
             result = announcements.send_dinner_bell(8080)
         assert result == (2, 3)
         mock_tts.assert_called_once_with(announcements.DINNER_BELL_TEXT)
@@ -290,6 +291,7 @@ class TestDinnerBell:
         with patch("announcements._generate_tts") as mock_tts, \
              patch("announcements._get_local_ip", return_value="10.0.0.1"), \
              patch("announcements._cast_to_all_speakers", return_value=(1, 1)):
+            mock_tts.return_value = announcements.ANNOUNCEMENT_FILE
             announcements.send_dinner_bell(9000, text="Dinner now")
         mock_tts.assert_called_once_with("Dinner now")
 
@@ -301,6 +303,8 @@ class TestDinnerBell:
 
     def test_cast_to_all_speakers_uses_group_only(self):
         cast_ok = _mock_cast()
+        cast_ok.status.volume_level = 0.8
+        cast_ok.status.volume_muted = False
         info_group = MagicMock()
         info_group.host = "192.168.2.50"
         info_group.port = 8009
@@ -320,12 +324,77 @@ class TestDinnerBell:
 
         with patch("announcements.discover_devices"), \
              patch("announcements._connect_by_cast_info", return_value=cast_ok) as mock_connect, \
-             patch("announcements._play_on_device") as mock_play:
+             patch("announcements._play_on_device") as mock_play, \
+             patch("announcements._wait_for_media_to_finish") as mock_wait:
             result = announcements._cast_to_all_speakers("http://host/audio.mp3")
 
         assert result == (1, 1)
         mock_connect.assert_called_once_with(info_group)
         mock_play.assert_called_once_with(cast_ok, "http://host/audio.mp3", "192.168.2.50", 8009)
+        mock_wait.assert_called_once_with(cast_ok.media_controller)
+        cast_ok.set_volume.assert_has_calls([
+            call(announcements.DINNER_BELL_VOLUME_LEVEL),
+            call(0.8),
+        ])
+        cast_ok.set_volume_muted.assert_called_once_with(False)
+        cast_ok.disconnect.assert_called_once()
+
+    def test_cast_to_all_speakers_restores_muted_state(self):
+        cast_ok = _mock_cast()
+        cast_ok.status.volume_level = 0.3
+        cast_ok.status.volume_muted = True
+        info_group = MagicMock()
+        info_group.host = "192.168.2.50"
+        info_group.port = 8009
+        info_group.friendly_name = "Main floor group"
+        info_group.cast_type = "group"
+
+        announcements._discovery_cache["cast_infos"] = {
+            "Main floor group": info_group,
+        }
+
+        with patch("announcements.discover_devices"), \
+             patch("announcements._connect_by_cast_info", return_value=cast_ok), \
+             patch("announcements._play_on_device"), \
+             patch("announcements._wait_for_media_to_finish"):
+            result = announcements._cast_to_all_speakers("http://host/audio.mp3")
+
+        assert result == (1, 1)
+        assert cast_ok.set_volume.call_args_list == [
+            call(announcements.DINNER_BELL_VOLUME_LEVEL),
+            call(0.3),
+        ]
+        assert cast_ok.set_volume_muted.call_args_list == [
+            call(False),
+            call(True),
+        ]
+        cast_ok.disconnect.assert_called_once()
+
+    def test_cast_to_all_speakers_restores_volume_after_failure(self):
+        cast_ok = _mock_cast()
+        cast_ok.status.volume_level = 0.7
+        cast_ok.status.volume_muted = False
+        info_group = MagicMock()
+        info_group.host = "192.168.2.50"
+        info_group.port = 8009
+        info_group.friendly_name = "Main floor group"
+        info_group.cast_type = "group"
+
+        announcements._discovery_cache["cast_infos"] = {
+            "Main floor group": info_group,
+        }
+
+        with patch("announcements.discover_devices"), \
+             patch("announcements._connect_by_cast_info", return_value=cast_ok), \
+             patch("announcements._play_on_device", side_effect=RuntimeError("boom")):
+            result = announcements._cast_to_all_speakers("http://host/audio.mp3")
+
+        assert result == (0, 1)
+        assert cast_ok.set_volume.call_args_list == [
+            call(announcements.DINNER_BELL_VOLUME_LEVEL),
+            call(0.7),
+        ]
+        cast_ok.set_volume_muted.assert_called_once_with(False)
         cast_ok.disconnect.assert_called_once()
 
     def test_cast_to_all_speakers_no_group_found(self):
