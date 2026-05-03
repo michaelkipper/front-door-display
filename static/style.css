@@ -61,6 +61,53 @@ body.shabbat-background {
   align-items: center;
 }
 
+.dinner-bell {
+  width: 4.2vw;
+  height: 4.2vw;
+  min-width: 52px;
+  min-height: 52px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(20, 20, 20, 0.7);
+  color: #f7e6a8;
+  font-size: 2.1vw;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.dinner-bell:hover {
+  transform: scale(1.05);
+  background: rgba(35, 35, 35, 0.85);
+}
+
+.dinner-bell:active {
+  transform: scale(0.98);
+}
+
+.dinner-bell.pending {
+  animation: bell-pulse 1s ease-in-out infinite;
+}
+
+.dinner-bell.success {
+  background: rgba(22, 101, 52, 0.8);
+  border-color: #4ade80;
+}
+
+.dinner-bell.error {
+  background: rgba(127, 29, 29, 0.85);
+  border-color: #f87171;
+}
+
+@keyframes bell-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
 .flip-cell {
   display: inline-block;
   perspective: 40vw;
@@ -350,6 +397,11 @@ body.shabbat-background {
   }
   .ampm-stack span {
     font-size: 50px;
+  }
+  .dinner-bell {
+    width: 62px;
+    height: 62px;
+    font-size: 32px;
   }
   .date {
     font-size: 48px;

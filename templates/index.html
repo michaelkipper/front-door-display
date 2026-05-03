@@ -39,6 +39,7 @@
 
     <div class="clock-container">
       <div id="time" class="time">
+        <button id="dinner-bell" class="dinner-bell" aria-label="Ring dinner bell" title="Ring dinner bell">🔔</button>
         <span id="time-string" class="flip-time"></span>
         <div class="ampm-stack">
           <span id="am-indicator" class="inactive">AM</span>
@@ -97,6 +98,7 @@
       const dateDisplayEl = document.getElementById("date-display");
       const amIndicator = document.getElementById("am-indicator");
       const pmIndicator = document.getElementById("pm-indicator");
+      const dinnerBellEl = document.getElementById("dinner-bell");
       const shabbatInfoEl = document.getElementById("shabbat-time-info");
       const holidayInfoEl = document.getElementById("holiday-info");
       const omerInfoEl = document.getElementById("omer-info");
@@ -414,6 +416,28 @@
       omerInfoEl.addEventListener("click", function () {
         omerShowHebrew = !omerShowHebrew;
         omerInfoEl.textContent = omerShowHebrew ? omerInfoEl.dataset.he : omerInfoEl.dataset.en;
+      });
+
+      // --- Dinner bell ---
+      dinnerBellEl.addEventListener("click", async function () {
+        if (dinnerBellEl.disabled) return;
+        dinnerBellEl.disabled = true;
+        dinnerBellEl.classList.remove("success", "error");
+        dinnerBellEl.classList.add("pending");
+        try {
+          const resp = await fetch("/api/dinner-bell", { method: "POST" });
+          const result = await resp.json();
+          dinnerBellEl.classList.remove("pending");
+          dinnerBellEl.classList.add(result.ok ? "success" : "error");
+        } catch (err) {
+          dinnerBellEl.classList.remove("pending");
+          dinnerBellEl.classList.add("error");
+          console.error("Dinner bell failed:", err);
+        }
+        setTimeout(function () {
+          dinnerBellEl.classList.remove("pending", "success", "error");
+          dinnerBellEl.disabled = false;
+        }, 3000);
       });
 
       // --- Image history gallery ---

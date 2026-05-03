@@ -26,6 +26,8 @@ DISCOVERY_CACHE_SECONDS = 5 * 60  # 5 minutes
 CONNECT_PROBE_TIMEOUT_SECONDS = 1.5
 CONNECT_PROBE_ATTEMPTS = 3
 CONNECT_PROBE_BACKOFF_SECONDS = 0.5
+DINNER_BELL_TEXT = "Attention Kipper Family! Dinner is served in the kitchen."
+PREFERRED_SPEAKER_GROUP_NAME = "All Speakers"
 
 # Track announced events to avoid repeats.
 _announced_events = set()
@@ -54,11 +56,13 @@ def _format_time_for_speech(dt: datetime.datetime) -> str:
     return f"{hour}:{minute} {ampm}"
 
 
-def _generate_tts(text: str) -> None:
+def _generate_tts(text: str) -> str:
     """Generate announcement audio and save to static file."""
     tts = gtts.gTTS(text=text, lang="en")
     tts.save(ANNOUNCEMENT_FILE)
     logging.info("Generated TTS audio: %s", ANNOUNCEMENT_FILE)
+
+    return ANNOUNCEMENT_FILE
 
 
 def discover_devices(timeout: int = 10) -> list[dict]:
@@ -269,9 +273,54 @@ def _cast_to_host(host: str, audio_url: str) -> bool:
             cast.disconnect()
 
 
+def _cast_to_all_speakers(audio_url: str) -> tuple[int, int]:
+    """Cast an audio URL to a speaker group so all members play in sync."""
+    discover_devices()
+    group_infos = [
+        cast_info
+        for cast_info in _discovery_cache["cast_infos"].values()
+        if str(getattr(cast_info, "cast_type", "")) == "group"
+    ]
+
+    if not group_infos:
+        logging.warning("No speaker group devices were discovered")
+        return (0, 0)
+
+    chosen_group: typing.Any | None = None
+    if PREFERRED_SPEAKER_GROUP_NAME:
+        chosen_group = next(
+            (g for g in group_infos if g.friendly_name == PREFERRED_SPEAKER_GROUP_NAME),
+            None,
+        )
+        if not chosen_group:
+            logging.warning(
+                "Preferred speaker group '%s' was not found; using first discovered group",
+                PREFERRED_SPEAKER_GROUP_NAME,
+            )
+
+    if not chosen_group:
+        chosen_group = sorted(group_infos, key=lambda g: (g.friendly_name or ""))[0]
+
+    cast = None
+    host = str(chosen_group.host)
+    port = int(chosen_group.port)
+    name = chosen_group.friendly_name or host
+    try:
+        cast = _connect_by_cast_info(chosen_group)
+        _play_on_device(cast, audio_url, host, port)
+        logging.info("Dinner bell cast to speaker group '%s' (%s:%s)", name, host, port)
+        return (1, 1)
+    except Exception:
+        logging.exception("Failed dinner bell cast to speaker group '%s' (%s:%s)", name, host, port)
+        return (0, 1)
+    finally:
+        if cast:
+            cast.disconnect()
+
+
 def _broadcast(text: str, server_port: int) -> bool:
     """Generate TTS audio and cast it to the speaker group."""
-    _generate_tts(text)
+    filename = _generate_tts(text)
     local_ip = _get_local_ip()
     audio_url = f"http://{local_ip}:{server_port}/static/announcement.mp3"
     return _cast_to_speakers(audio_url)
@@ -343,6 +392,14 @@ def send_test(server_port: int, text: str = "This is a test announcement from th
     if host:
         return _cast_to_host(host, audio_url)
     return _cast_to_speakers(audio_url)
+
+
+def send_dinner_bell(server_port: int, text: str = DINNER_BELL_TEXT) -> tuple[int, int]:
+    """Broadcast a dinner bell announcement to a discovered speaker group."""
+    filename = _generate_tts(text)
+    local_ip = _get_local_ip()
+    audio_url = f"http://{local_ip}:{server_port}/{filename}"
+    return _cast_to_all_speakers(audio_url)
 
 
 def start_announcement_loop(

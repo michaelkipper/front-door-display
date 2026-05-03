@@ -588,6 +588,20 @@ def api_test_announcement() -> flask.Response | tuple[flask.Response, int]:
         return flask.jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@flaskapp.route("/api/dinner-bell", methods=["POST"])
+def api_dinner_bell() -> flask.Response | tuple[flask.Response, int]:
+    try:
+        success_count, total = announcements.send_dinner_bell(_PORT.value)
+        return flask.jsonify({
+            "ok": success_count > 0,
+            "success_count": success_count,
+            "total": total,
+        })
+    except Exception as exc:
+        logging.exception("Dinner bell broadcast failed")
+        return flask.jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @flaskapp.route("/api/chromecast-devices")
 def api_chromecast_devices() -> flask.Response | tuple[flask.Response, int]:
     try:

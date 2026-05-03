@@ -522,6 +522,15 @@ class TestFlaskAPI:
         data = json.loads(resp.data)
         assert data["offset_ms"] == 3600000
 
+    def test_api_dinner_bell(self, client):
+        with patch("server.announcements.send_dinner_bell", return_value=(2, 3)) as mock_bell:
+            resp = client.post("/api/dinner-bell")
+
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data == {"ok": True, "success_count": 2, "total": 3}
+        mock_bell.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # Water meter tests
