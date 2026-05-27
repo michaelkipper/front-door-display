@@ -34,18 +34,18 @@
       <button data-hourglass="stop">off</button>
       <span class="controls-sep">|</span>
       <button data-action="test-announce">Announce</button>
+      <button id="dinner-bell" class="dinner-bell" aria-label="Ring dinner bell" title="Ring dinner bell">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-5-5.9V4a1 1 0 1 0-2 0v1.1A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.6 1.4L4 17h5" />
+          <path d="M9 17a3 3 0 0 0 6 0" />
+        </svg>
+      </button>
       <button data-action="close">&times;</button>
     </div>
 
     <div class="clock-container">
       <div id="time" class="time">
         <span id="time-string" class="flip-time"></span>
-        <button id="dinner-bell" class="dinner-bell" aria-label="Ring dinner bell" title="Ring dinner bell">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-5-5.9V4a1 1 0 1 0-2 0v1.1A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.6 1.4L4 17h5" />
-            <path d="M9 17a3 3 0 0 0 6 0" />
-          </svg>
-        </button>
         <div class="ampm-stack">
           <span id="am-indicator" class="inactive">AM</span>
           <span id="pm-indicator" class="active">PM</span>
