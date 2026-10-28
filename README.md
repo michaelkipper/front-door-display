@@ -25,7 +25,8 @@ Python Flask backend with a thin vanilla JavaScript frontend (clock tick + perio
 | `templates/index.html` | Single-page UI with clock, date, holiday, weather containers + thin JS |
 | `static/style.css` | Dark theme, responsive `vw`-based sizing, Shabbat background styling |
 | `static/challah.png` | Fallback background image when no Gemini key is configured |
-| `test_server.py` | pytest tests for calendar logic, Shabbat detection, prompt builder |
+| `server_test.py` | pytest tests for calendar logic, Shabbat detection, prompt builder |
+| `announcements_test.py` | pytest tests for the announcements module |
 
 ### API endpoints
 
@@ -73,6 +74,6 @@ Location is hardcoded to **Vaughan, Ontario** (`43.8563, -79.5085`) in `server.p
 ## Running tests
 
 ```bash
-pip install pytest
-pytest test_server.py -v
+pip install -r requirements-dev.txt
+pytest -v
 ```
