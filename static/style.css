@@ -412,6 +412,10 @@ body.shabbat-background {
     width: 62px;
     height: 62px;
   }
+  .lighting-trigger {
+    width: 62px;
+    height: 62px;
+  }
   .date {
     font-size: 48px;
   }
@@ -567,3 +571,390 @@ body.shabbat-background {
   border-radius: 6px;
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------------ */
+/* Lutron lighting controls & drawer overlay                           */
+/* ------------------------------------------------------------------ */
+
+.lighting-trigger {
+  position: absolute;
+  bottom: 72px;
+  right: 30px;
+  width: 4.2vw;
+  height: 4.2vw;
+  min-width: 52px;
+  min-height: 52px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(20, 20, 20, 0.75);
+  color: #a3a3a3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 8;
+  transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lighting-trigger svg {
+  width: 54%;
+  height: 54%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lighting-trigger:hover {
+  transform: scale(1.05);
+  background: rgba(35, 35, 35, 0.9);
+}
+
+.lighting-trigger:active {
+  transform: scale(0.96);
+}
+
+.lighting-trigger.has-lights-on {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.6);
+  background: rgba(45, 35, 15, 0.85);
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.35);
+}
+
+/* Drawer overlay */
+#lighting-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 16, 22, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 200;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+}
+
+#lighting-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.lighting-container {
+  width: 100%;
+  max-width: 660px;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 30px 24px 60px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lighting-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.lighting-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lighting-header-icon {
+  width: 32px;
+  height: 32px;
+  stroke: #fbbf24;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lighting-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #f3f4f6;
+  letter-spacing: -0.01em;
+}
+
+.lighting-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.lighting-auto-close {
+  font-size: 14px;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+}
+
+.lighting-close-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  background: rgba(220, 38, 38, 0.85);
+  color: #ffffff;
+  border: none;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.lighting-close-btn:hover {
+  background: #ef4444;
+  transform: scale(1.05);
+}
+
+.lighting-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #9ca3af;
+  margin-top: 6px;
+  margin-bottom: -6px;
+}
+
+.lighting-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.quick-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(30, 33, 44, 0.85);
+  color: #f3f4f6;
+  transition: background-color 0.15s ease, transform 0.1s ease, border-color 0.15s ease;
+}
+
+.quick-action-btn:active {
+  transform: scale(0.97);
+}
+
+.all-off-btn {
+  background: rgba(127, 29, 29, 0.7);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+.all-off-btn:hover {
+  background: rgba(153, 27, 27, 0.85);
+}
+
+.all-off-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.scenes-list {
+  display: contents;
+}
+
+.scene-btn:hover {
+  background: rgba(45, 50, 68, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.quick-action-btn.pending {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.device-card {
+  background: rgba(25, 28, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.device-card.active {
+  background: rgba(35, 33, 28, 0.9);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.device-main-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.device-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.device-status {
+  font-size: 14px;
+  font-weight: 500;
+  color: #9ca3af;
+}
+
+.device-card.active .device-status {
+  color: #fbbf24;
+}
+
+.device-toggle-btn {
+  min-width: 76px;
+  min-height: 48px;
+  border-radius: 24px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.device-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+.device-toggle-btn.is-on {
+  background: #fbbf24;
+  color: #1c1917;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
+.device-toggle-btn.is-off {
+  background: rgba(60, 64, 78, 0.7);
+  color: #9ca3af;
+}
+
+.device-dimmer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.device-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+  margin: 8px 0;
+}
+
+.device-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fbbf24;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+}
+
+.device-slider::-moz-range-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fbbf24;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+}
+
+.dimmer-presets {
+  display: flex;
+  gap: 8px;
+}
+
+.preset-btn {
+  flex: 1;
+  min-height: 38px;
+  border-radius: 8px;
+  background: rgba(45, 48, 62, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #d1d5db;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.preset-btn:hover {
+  background: rgba(65, 70, 88, 0.85);
+  color: #ffffff;
+}
+
+.preset-btn:active {
+  background: #fbbf24;
+  color: #1c1917;
+}
+
+.lighting-empty {
+  color: #9ca3af;
+  font-size: 16px;
+  text-align: center;
+  padding: 30px 0;
+}
+
+.lighting-status-msg {
+  background: rgba(30, 33, 44, 0.9);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+  border-radius: 12px;
+  padding: 16px 20px;
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: center;
+}
+

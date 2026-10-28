@@ -5,4 +5,5 @@ google-cloud-logging>=3.0.0
 google-genai>=1.0
 gTTS>=2.5
 PyChromecast>=14.0
+pylutron-caseta>=0.30.0
 yfinance>=0.2.30

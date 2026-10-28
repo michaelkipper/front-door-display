@@ -414,6 +414,12 @@ def _check_and_announce(
             logging.info("Broadcasting: %s", text)
             if _broadcast(text, server_port):
                 _announced_events.add(event_key)
+            if event["is_candle_lighting"]:
+                try:
+                    import lutron
+                    lutron.flash_lights_for_shabbat_reminder()
+                except Exception:
+                    logging.exception("Failed to flash lights for Shabbat reminder")
 
     # Prevent unbounded growth.
     if len(_announced_events) > 50:

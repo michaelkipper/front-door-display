@@ -16,7 +16,8 @@
     "server.py",
     "image_gen.py",
     "stocks.py",
-    "water_meter.py"
+    "water_meter.py",
+    "lutron.py"
   ],
   "reportMissingTypeStubs": false,
   "reportUnusedImport": "warning",

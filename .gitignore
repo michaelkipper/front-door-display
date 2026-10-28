@@ -20,6 +20,11 @@
 # Generated images
 /images/
 
+# Lutron certificates
+/certs/
+*.key
+*.crt
+
 # Python
 __pycache__/
 *.pyc
@@ -38,3 +43,6 @@ yarn-error.log*
 
 # Virtual environment
 .venv/*
+
+# VS Code settings
+.vscode/

@@ -29,7 +29,7 @@ reportGeneralTypeIssues = "error"       # Catch type mismatches as errors
 reportOptionalOperand = "error"         # Catch operations on None values
 
 # Main code to check strictly (test files excluded — pytest patterns cause false positives)
-include = ["announcements.py", "server.py", "image_gen.py", "stocks.py", "water_meter.py", "config.py"]
+include = ["announcements.py", "server.py", "image_gen.py", "stocks.py", "water_meter.py", "lutron.py", "config.py"]
 
 # Exclude auxiliary files
 exclude = [".venv", "*.egg-info", "__pycache__", ".git", "images/", "static/", "templates/"]

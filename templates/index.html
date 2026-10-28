@@ -40,6 +40,7 @@
           <path d="M9 17a3 3 0 0 0 6 0" />
         </svg>
       </button>
+      <button data-action="open-lights" title="Open lighting controls">💡 Lights</button>
       <button data-action="close">&times;</button>
     </div>
 
@@ -69,6 +70,13 @@
       <div id="weather-forecast"></div>
     </div>
 
+    <!-- Lighting controls button (lower-right, above water reading) -->
+    <button id="lighting-button" class="lighting-trigger" aria-label="Open lighting controls" title="Lighting Controls">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M9 18h6m-4 3h2m-4-6a6.5 6.5 0 1 1 6-4.5c0 2-1 3.5-2 4.5H9z" />
+      </svg>
+    </button>
+
     <!-- Water meter reading (lower-right) -->
     <div id="water-reading">-- m³</div>
 
@@ -95,6 +103,42 @@
     <!-- Gallery lightbox (maximized single image) -->
     <div id="gallery-lightbox">
       <img id="gallery-lightbox-img" src="" alt="" />
+    </div>
+
+    <!-- Lighting drawer overlay -->
+    <div id="lighting-overlay">
+      <div class="lighting-container">
+        <div class="lighting-header">
+          <div class="lighting-title-group">
+            <svg class="lighting-header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M9 18h6m-4 3h2m-4-6a6.5 6.5 0 1 1 6-4.5c0 2-1 3.5-2 4.5H9z" />
+            </svg>
+            <span class="lighting-title">Lighting &amp; Scenes</span>
+          </div>
+          <div class="lighting-header-right">
+            <span id="lighting-auto-close" class="lighting-auto-close">Auto-close in 30s</span>
+            <button id="lighting-close" class="lighting-close-btn" aria-label="Close lighting drawer">&times;</button>
+          </div>
+        </div>
+
+        <div id="lighting-content">
+          <!-- Quick actions -->
+          <div class="lighting-section-title">QUICK ACTIONS</div>
+          <div class="lighting-quick-actions">
+            <button id="lighting-all-off-btn" class="quick-action-btn all-off-btn" title="Turn off all lights">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              <span>All Off</span>
+            </button>
+            <div id="lighting-scenes-list" class="scenes-list"></div>
+          </div>
+
+          <!-- Lights & dimmers list -->
+          <div class="lighting-section-title">LIGHTS &amp; DIMMERS</div>
+          <div id="lighting-devices-list" class="devices-list"></div>
+        </div>
+
+        <div id="lighting-status-msg" class="lighting-status-msg" style="display:none"></div>
+      </div>
     </div>
 
     <script>
@@ -355,6 +399,11 @@
           return;
         }
 
+        if (button.dataset.action === "open-lights") {
+          openLightingDrawer();
+          return;
+        }
+
         // Hourglass debug buttons
         if (button.dataset.hourglass) {
           if (button.dataset.hourglass === "stop") {
@@ -461,7 +510,7 @@
       document.body.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
       function isInteractiveTarget(el) {
-        return !!el.closest("button, a, input, select, #offset-trigger, #water-reading, #omer-info, #gallery-overlay, #gallery-lightbox");
+        return !!el.closest("button, a, input, select, #offset-trigger, #water-reading, #omer-info, #gallery-overlay, #gallery-lightbox, #lighting-overlay, #lighting-button");
       }
 
       function startLongPress(e) {
@@ -540,11 +589,264 @@
 
       galleryLightboxEl.addEventListener("click", closeLightbox);
 
+      // --- Lutron lighting drawer ---
+      const lightingButtonEl = document.getElementById("lighting-button");
+      const lightingOverlayEl = document.getElementById("lighting-overlay");
+      const lightingCloseEl = document.getElementById("lighting-close");
+      const lightingAutoCloseEl = document.getElementById("lighting-auto-close");
+      const lightingScenesListEl = document.getElementById("lighting-scenes-list");
+      const lightingDevicesListEl = document.getElementById("lighting-devices-list");
+      const lightingAllOffBtn = document.getElementById("lighting-all-off-btn");
+      const lightingStatusMsgEl = document.getElementById("lighting-status-msg");
+
+      let lightingAutoCloseTimer = null;
+      let lightingAutoCloseSeconds = 30;
+      let lightingPollInterval = null;
+
+      function resetLightingAutoClose() {
+        lightingAutoCloseSeconds = 30;
+        if (lightingAutoCloseEl) {
+          lightingAutoCloseEl.textContent = "Auto-close in " + lightingAutoCloseSeconds + "s";
+        }
+      }
+
+      function startLightingAutoClose() {
+        resetLightingAutoClose();
+        clearInterval(lightingAutoCloseTimer);
+        lightingAutoCloseTimer = setInterval(function () {
+          lightingAutoCloseSeconds--;
+          if (lightingAutoCloseSeconds <= 0) {
+            closeLightingDrawer();
+          } else if (lightingAutoCloseEl) {
+            lightingAutoCloseEl.textContent = "Auto-close in " + lightingAutoCloseSeconds + "s";
+          }
+        }, 1000);
+      }
+
+      function stopLightingAutoClose() {
+        clearInterval(lightingAutoCloseTimer);
+        lightingAutoCloseTimer = null;
+      }
+
+      lightingOverlayEl.addEventListener("touchstart", resetLightingAutoClose, { passive: true });
+      lightingOverlayEl.addEventListener("mousedown", resetLightingAutoClose);
+      lightingOverlayEl.addEventListener("input", resetLightingAutoClose);
+
+      async function openLightingDrawer() {
+        lightingOverlayEl.classList.add("visible");
+        startLightingAutoClose();
+        await fetchLightingState();
+        clearInterval(lightingPollInterval);
+        lightingPollInterval = setInterval(fetchLightingState, 3000);
+      }
+
+      function closeLightingDrawer() {
+        lightingOverlayEl.classList.remove("visible");
+        stopLightingAutoClose();
+        clearInterval(lightingPollInterval);
+        lightingPollInterval = null;
+      }
+
+      lightingButtonEl.addEventListener("click", openLightingDrawer);
+      lightingCloseEl.addEventListener("click", closeLightingDrawer);
+
+      async function fetchLightingState() {
+        try {
+          const resp = await fetch("/api/lutron/state");
+          if (!resp.ok) return;
+          const data = await resp.json();
+          renderLighting(data);
+        } catch (e) {
+          console.error("Failed to fetch Lutron state:", e);
+        }
+      }
+
+      function renderLighting(data) {
+        if (!data.configured) {
+          lightingStatusMsgEl.textContent = "Lutron Caséta is not configured. Add LUTRON_BRIDGE_IP and certificates in config.py.";
+          lightingStatusMsgEl.style.display = "block";
+          document.getElementById("lighting-content").style.display = "none";
+          return;
+        }
+
+        if (!data.connected) {
+          lightingStatusMsgEl.textContent = "Connecting to Lutron Smart Bridge...";
+          lightingStatusMsgEl.style.display = "block";
+        } else {
+          lightingStatusMsgEl.style.display = "none";
+        }
+        document.getElementById("lighting-content").style.display = "block";
+
+        const devices = data.devices || [];
+        const scenes = data.scenes || [];
+
+        // Update trigger button glow if any light is on
+        const anyOn = devices.some(function (d) { return d.is_on; });
+        if (anyOn) {
+          lightingButtonEl.classList.add("has-lights-on");
+        } else {
+          lightingButtonEl.classList.remove("has-lights-on");
+        }
+
+        // Render scenes
+        lightingScenesListEl.innerHTML = "";
+        scenes.forEach(function (scene) {
+          const btn = document.createElement("button");
+          btn.className = "quick-action-btn scene-btn";
+          btn.textContent = scene.name;
+          btn.addEventListener("click", async function () {
+            btn.classList.add("pending");
+            try {
+              await fetch("/api/lutron/scene", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scene_id: scene.id }),
+              });
+              setTimeout(fetchLightingState, 600);
+            } finally {
+              btn.classList.remove("pending");
+            }
+          });
+          lightingScenesListEl.appendChild(btn);
+        });
+
+        // Render devices
+        lightingDevicesListEl.innerHTML = "";
+        if (!devices.length) {
+          lightingDevicesListEl.innerHTML = '<p class="lighting-empty">No controllable lights or switches discovered.</p>';
+          return;
+        }
+
+        devices.forEach(function (device) {
+          const card = document.createElement("div");
+          card.className = "device-card" + (device.is_on ? " active" : "");
+          card.dataset.deviceId = device.id;
+
+          const mainRow = document.createElement("div");
+          mainRow.className = "device-main-row";
+
+          const infoDiv = document.createElement("div");
+          infoDiv.className = "device-info";
+
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "device-name";
+          nameSpan.textContent = device.name;
+
+          const statusSpan = document.createElement("span");
+          statusSpan.className = "device-status";
+          statusSpan.textContent = device.is_on ? (device.is_dimmable ? device.level + "%" : "On") : "Off";
+
+          infoDiv.appendChild(nameSpan);
+          infoDiv.appendChild(statusSpan);
+
+          const toggleBtn = document.createElement("button");
+          toggleBtn.className = "device-toggle-btn " + (device.is_on ? "is-on" : "is-off");
+          toggleBtn.textContent = device.is_on ? "ON" : "OFF";
+          toggleBtn.addEventListener("click", async function () {
+            const newLevel = device.is_on ? 0 : 100;
+            // Optimistic update
+            card.classList.toggle("active", newLevel > 0);
+            toggleBtn.className = "device-toggle-btn " + (newLevel > 0 ? "is-on" : "is-off");
+            toggleBtn.textContent = newLevel > 0 ? "ON" : "OFF";
+            statusSpan.textContent = newLevel > 0 ? (device.is_dimmable ? "100%" : "On") : "Off";
+            if (slider) slider.value = String(newLevel);
+
+            await setDeviceLevel(device.id, newLevel);
+            setTimeout(fetchLightingState, 500);
+          });
+
+          mainRow.appendChild(infoDiv);
+          mainRow.appendChild(toggleBtn);
+          card.appendChild(mainRow);
+
+          let slider = null;
+          if (device.is_dimmable) {
+            const dimmerRow = document.createElement("div");
+            dimmerRow.className = "device-dimmer-row";
+
+            slider = document.createElement("input");
+            slider.type = "range";
+            slider.className = "device-slider";
+            slider.min = "0";
+            slider.max = "100";
+            slider.value = String(device.level || 0);
+
+            let debounceTimer = null;
+            slider.addEventListener("input", function () {
+              const val = parseInt(slider.value, 10);
+              statusSpan.textContent = val > 0 ? val + "%" : "Off";
+              card.classList.toggle("active", val > 0);
+              toggleBtn.className = "device-toggle-btn " + (val > 0 ? "is-on" : "is-off");
+              toggleBtn.textContent = val > 0 ? "ON" : "OFF";
+
+              clearTimeout(debounceTimer);
+              debounceTimer = setTimeout(function () {
+                setDeviceLevel(device.id, val);
+              }, 250);
+            });
+
+            const presetsDiv = document.createElement("div");
+            presetsDiv.className = "dimmer-presets";
+            [25, 50, 75, 100].forEach(function (lvl) {
+              const pBtn = document.createElement("button");
+              pBtn.className = "preset-btn";
+              pBtn.textContent = lvl + "%";
+              pBtn.addEventListener("click", async function () {
+                slider.value = String(lvl);
+                statusSpan.textContent = lvl + "%";
+                card.classList.add("active");
+                toggleBtn.className = "device-toggle-btn is-on";
+                toggleBtn.textContent = "ON";
+                await setDeviceLevel(device.id, lvl);
+                setTimeout(fetchLightingState, 500);
+              });
+              presetsDiv.appendChild(pBtn);
+            });
+
+            dimmerRow.appendChild(slider);
+            dimmerRow.appendChild(presetsDiv);
+            card.appendChild(dimmerRow);
+          }
+
+          lightingDevicesListEl.appendChild(card);
+        });
+      }
+
+      async function setDeviceLevel(deviceId, level) {
+        try {
+          await fetch("/api/lutron/set", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_id: deviceId, level: level }),
+          });
+        } catch (e) {
+          console.error("Failed to set level:", e);
+        }
+      }
+
+      lightingAllOffBtn.addEventListener("click", async function () {
+        lightingAllOffBtn.classList.add("pending");
+        try {
+          await fetch("/api/lutron/set", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "all_off" }),
+          });
+          setTimeout(fetchLightingState, 600);
+        } catch (e) {
+          console.error("Failed to turn all off:", e);
+        } finally {
+          lightingAllOffBtn.classList.remove("pending");
+        }
+      });
+
       // --- Initialize ---
       updateClock();
       fetchState();
+      fetchLightingState();
       setInterval(updateClock, 1000);
       setInterval(fetchState, 30000);
+      setInterval(fetchLightingState, 30000);
     </script>
     <script src="/static/hourglass.js"></script>
     <script src="/static/water_meter.js"></script>

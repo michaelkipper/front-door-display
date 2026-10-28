@@ -29,6 +29,7 @@ import flask
 
 import announcements
 import image_gen
+import lutron
 import stocks
 import water_meter
 
@@ -576,12 +577,20 @@ def api_offset() -> flask.Response:
     return flask.jsonify({"offset_ms": _time_offset_ms})
 
 
+def _get_server_port() -> int:
+    """Return port flag value or default if flags are unparsed (e.g. during tests)."""
+    try:
+        return _PORT.value
+    except (flags.UnparsedFlagAccessError, AttributeError):
+        return _PORT.default or 8080
+
+
 @flaskapp.route("/api/test-announcement", methods=["POST"])
 def api_test_announcement() -> flask.Response | tuple[flask.Response, int]:
     try:
         data = flask.request.get_json(silent=True) or {}
         host = data.get("host")  # optional: cast to a specific IP
-        ok = announcements.send_test(_PORT.value, host=host)
+        ok = announcements.send_test(_get_server_port(), host=host)
         return flask.jsonify({"ok": ok})
     except Exception as exc:
         logging.exception("Test announcement failed")
@@ -591,7 +600,11 @@ def api_test_announcement() -> flask.Response | tuple[flask.Response, int]:
 @flaskapp.route("/api/dinner-bell", methods=["POST"])
 def api_dinner_bell() -> flask.Response | tuple[flask.Response, int]:
     try:
-        success_count, total = announcements.send_dinner_bell(_PORT.value)
+        try:
+            lutron.flash_lights_for_dinner_bell()
+        except Exception:
+            logging.exception("Failed to flash lights for dinner bell")
+        success_count, total = announcements.send_dinner_bell(_get_server_port())
         return flask.jsonify({
             "ok": success_count > 0,
             "success_count": success_count,
@@ -647,6 +660,56 @@ def api_water_history() -> flask.Response:
 
 
 # ---------------------------------------------------------------------------
+# Lutron lighting routes
+# ---------------------------------------------------------------------------
+
+@flaskapp.route("/api/lutron/state")
+def api_lutron_state() -> flask.Response:
+    """Return connection status, lights/switches, and scenes from Lutron."""
+    return flask.jsonify({
+        "configured": lutron.is_configured(),
+        "connected": lutron.is_connected(),
+        "devices": lutron.get_devices(),
+        "scenes": lutron.get_scenes(),
+    })
+
+
+@flaskapp.route("/api/lutron/set", methods=["POST"])
+def api_lutron_set() -> flask.Response | tuple[flask.Response, int]:
+    """Set device brightness level (0-100) or turn all off."""
+    data = flask.request.get_json(silent=True) or {}
+    action = data.get("action")
+
+    if action == "all_off":
+        ok = lutron.turn_all_off()
+        return flask.jsonify({"ok": ok})
+
+    device_id = str(data.get("device_id", ""))
+    if not device_id:
+        return flask.jsonify({"ok": False, "error": "Missing device_id"}), 400
+
+    try:
+        level = int(data.get("level", 0))
+    except (ValueError, TypeError):
+        return flask.jsonify({"ok": False, "error": "Invalid level"}), 400
+
+    ok = lutron.set_device_level(device_id, level)
+    return flask.jsonify({"ok": ok})
+
+
+@flaskapp.route("/api/lutron/scene", methods=["POST"])
+def api_lutron_scene() -> flask.Response | tuple[flask.Response, int]:
+    """Activate a Lutron scene by ID."""
+    data = flask.request.get_json(silent=True) or {}
+    scene_id = str(data.get("scene_id", ""))
+    if not scene_id:
+        return flask.jsonify({"ok": False, "error": "Missing scene_id"}), 400
+
+    ok = lutron.activate_scene(scene_id)
+    return flask.jsonify({"ok": ok})
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -655,6 +718,7 @@ def main(argv: list[str]) -> None:
 
     # Setup Google Cloud logging
     if _CLOUD_LOGGING_AVAILABLE:
+        import google.cloud.logging  # type: ignore[import-not-found]
         client = google.cloud.logging.Client()
         client.setup_logging(log_level=py_logging.INFO)
     logging.info('Front Door Display server starting...')
@@ -684,6 +748,9 @@ def main(argv: list[str]) -> None:
     # Start background water meter polling thread
     water_thread = threading.Thread(target=_water_meter_loop, daemon=True)
     water_thread.start()
+
+    # Start Lutron Caséta background connection thread
+    lutron.start_lutron()
 
     # Start Shabbat announcement loop
     announcements.start_announcement_loop(_now, _get_events_for_date, _PORT.value)

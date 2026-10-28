@@ -21,12 +21,14 @@ Python Flask backend with a thin vanilla JavaScript frontend (clock tick + perio
 |---|---|
 | `server.py` | Flask app — calendar, weather, state API, image scheduler |
 | `image_gen.py` | Gemini image generation + context-aware prompt builder |
-| `config.py` | Gemini API key (gitignored) |
-| `templates/index.html` | Single-page UI with clock, date, holiday, weather containers + thin JS |
-| `static/style.css` | Dark theme, responsive `vw`-based sizing, Shabbat background styling |
+| `lutron.py` | Lutron Caséta bridge connection, device/scene control, visual alerts |
+| `config.py` | Secrets and hardware configuration (gitignored) |
+| `templates/index.html` | Single-page UI with clock, date, holiday, weather, and lighting drawer + thin JS |
+| `static/style.css` | Dark theme, responsive sizing, lighting drawer overlay styling |
 | `static/challah.png` | Fallback background image when no Gemini key is configured |
 | `server_test.py` | pytest tests for calendar logic, Shabbat detection, prompt builder |
 | `announcements_test.py` | pytest tests for the announcements module |
+| `lutron_test.py` | pytest tests for the Lutron module and endpoints |
 
 ### API endpoints
 
@@ -35,6 +37,9 @@ Python Flask backend with a thin vanilla JavaScript frontend (clock tick + perio
 | `/` | GET | Serves the main HTML page |
 | `/api/state` | GET | Returns JSON with weather, holiday, candle lighting, background image |
 | `/api/offset` | POST | Debug time offset (body: `{"action": "reset"}` or `{"offset_ms": 3600000}`) |
+| `/api/lutron/state` | GET | Returns Lutron connection status, devices, and scenes |
+| `/api/lutron/set` | POST | Set device level (`{"device_id": "...", "level": 75}`) or `{"action": "all_off"}` |
+| `/api/lutron/scene` | POST | Activate a Lutron scene (`{"scene_id": "..."}`) |
 
 ## Setup
 
@@ -51,6 +56,30 @@ python server.py
 ```
 
 The server starts at `http://localhost:8080`. Images are generated hourly and saved to `images/current.png`.
+
+## Lutron Caséta integration
+
+To connect your Lutron Smart Bridge:
+
+1. Run the pairing command from the Pi:
+   ```bash
+   python lutron.py pair <BRIDGE_IP>
+   ```
+2. When prompted, press the small black button on the back of the Smart Bridge.
+3. This downloads and saves `caseta.key`, `caseta.crt`, and `caseta-bridge.crt` into `certs/` (gitignored).
+4. Add the configuration to your `config.py`:
+   ```python
+   LUTRON_BRIDGE_IP = "192.168.2.xxx"
+   LUTRON_KEY_PATH = "certs/caseta.key"
+   LUTRON_CERT_PATH = "certs/caseta.crt"
+   LUTRON_CA_PATH = "certs/caseta-bridge.crt"
+
+   # Optional: device IDs of lights to pulse for announcements
+   LUTRON_DINNER_BELL_ZONES = ["2"]
+   LUTRON_SHABBAT_REMINDER_ZONES = ["2"]
+   ```
+
+Tapping the lightbulb icon on the display opens the lighting drawer to toggle lights, adjust dimmers, or tap **All Off**.
 
 ## Image generation
 
